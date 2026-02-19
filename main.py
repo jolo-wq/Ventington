@@ -177,16 +177,33 @@ async def on_ready():
     bot.add_view(EventView())
     scheduler.start()
 
-    GUILD_ID = 802618368804782080
-    
-    guild = discord.Object(id=GUILD_ID)
-    await bot.tree.sync(guild=guild)
+    GUILD_ID = 802618368804782080  # deine Server-ID
 
-    print("Slash-Commands synchronisiert!")
+@bot.tree.command(
+    name="testevent",
+    description="Startet eine Test-Umfrage",
+    guild=discord.Object(id=GUILD_ID)
+)
+async def testevent(interaction: discord.Interaction):
+
+    test_time = datetime.now(berlin) + timedelta(minutes=2)
+
+    await post_poll(
+        interaction.channel,
+        "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
+        test_time
+    )
+
+    await interaction.response.send_message(
+        "✅ Test-Umfrage erstellt!",
+        ephemeral=True
+    )
+
   
 
 
 bot.run(TOKEN)
+
 
 
 
