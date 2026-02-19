@@ -7,16 +7,30 @@ import os
 TOKEN = os.getenv("TOKEN")
 
 CHANNEL_ID = 803255642206240818
-GUILD_ID = 802618368804782080  # 🔥 Server-ID
-
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+GUILD_ID = 802618368804782080  # Server-ID
 
 berlin = pytz.timezone("Europe/Berlin")
 
 last_poll_message = None
 event_time = None
 current_view = None
+
+
+# ================= BOT MIT SETUP HOOK =================
+
+class MyBot(commands.Bot):
+    async def setup_hook(self):
+        guild = discord.Object(id=GUILD_ID)
+
+        # Slash-Commands sofort nur für diesen Server registrieren
+        self.tree.copy_global_to(guild=guild)
+        await self.tree.sync(guild=guild)
+
+        print("Slash-Commands synchronisiert!")
+
+
+intents = discord.Intents.all()
+bot = MyBot(command_prefix="!", intents=intents)
 
 
 # ================= PANEL =================
@@ -150,13 +164,9 @@ async def scheduler():
             await send_reminder(channel, "⚡ Noch 15 Minuten!")
 
 
-# ================= SLASH TEST (SERVERGEBUNDEN) =================
+# ================= SLASH COMMAND =================
 
-@bot.tree.command(
-    name="testevent",
-    description="Startet eine Test-Umfrage",
-    guild=discord.Object(id=GUILD_ID)
-)
+@bot.tree.command(name="testevent", description="Startet eine Test-Umfrage")
 async def testevent(interaction: discord.Interaction):
 
     test_time = datetime.now(berlin) + timedelta(minutes=2)
@@ -181,14 +191,6 @@ async def on_ready():
 
     bot.add_view(EventView())
     scheduler.start()
-
-    guild = discord.Object(id=802618368804782080)
-
-    # 🔥 Commands NUR für diesen Server registrieren
-    bot.tree.copy_global_to(guild=guild)
-    await bot.tree.sync(guild=guild)
-
-    print("Slash-Commands synchronisiert!")
 
 
 bot.run(TOKEN)
