@@ -93,45 +93,7 @@ async def post_poll(channel, text, event_dt):
 
     last_poll_message = msg
     event_time = event_dt
-
-# ---------- Teilnehmerliste ----------
-async def update_poll(message):
-    yes, maybe = [], []
-
-    for reaction in message.reactions:
-        users = [u async for u in reaction.users() if not u.bot]
-
-        if str(reaction.emoji) == "👍":
-            yes = users
-        elif str(reaction.emoji) == "🤷":
-            maybe = users
-
-    text = message.content.split("\n\n")[0] + "\n\n"
-
-    if yes:
-        text += f"👍 Ja ({len(yes)})\n"
-        text += "\n".join(u.mention for u in yes) + "\n\n"
-
-    if maybe:
-        text += f"🤷 Vielleicht ({len(maybe)})\n"
-        text += "\n".join(u.mention for u in maybe)
-
-    await message.edit(content=text)
-
-# ---------- Doppelvotes verhindern ----------
-@bot.event
-async def on_reaction_add(reaction, user):
-    if user.bot or reaction.message != last_poll_message:
-        return
-
-    for react in reaction.message.reactions:
-        if react.emoji != reaction.emoji:
-            async for u in react.users():
-                if u == user:
-                    await react.remove(user)
-
-    await update_poll(reaction.message)
-
+    
 # ---------- Erinnerungen ----------
 async def send_reminder(channel, text):
     if not current_view:
@@ -202,6 +164,7 @@ async def on_ready():
         )
 
 bot.run(TOKEN)
+
 
 
 
