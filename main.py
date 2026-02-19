@@ -182,13 +182,17 @@ async def on_ready():
     bot.add_view(EventView())
     scheduler.start()
 
-    guild = discord.Object(id=GUILD_ID)
+    guild = discord.Object(id=802618368804782080)
+
+    # 🔥 Commands NUR für diesen Server registrieren
+    bot.tree.copy_global_to(guild=guild)
     await bot.tree.sync(guild=guild)
 
     print("Slash-Commands synchronisiert!")
 
 
 bot.run(TOKEN)
+
 
 
 
