@@ -1,11 +1,24 @@
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 from datetime import datetime, timedelta
 import pytz
 import os
 
-current_view = None  # für Reminder
-startup_test_sent = False  # 🔥 verhindert doppelte Testumfragen
+TOKEN = os.getenv("TOKEN")
+CHANNEL_ID = 803255642206240818
+
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+berlin = pytz.timezone("Europe/Berlin")
+
+last_poll_message = None
+event_time = None
+current_view = None
+
+
+# ================= PANEL =================
 
 class EventView(discord.ui.View):
     def __init__(self):
@@ -50,24 +63,9 @@ class EventView(discord.ui.View):
         self.no.add(interaction.user.id)
         await self.update_message(interaction)
 
-TOKEN = os.getenv("TOKEN")
-CHANNEL_ID = 803255642206240818
 
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+# ================= PANEL POSTEN =================
 
-berlin = pytz.timezone("Europe/Berlin")
-
-last_poll_message = None
-event_time = None
-
-# ---------- Spielrotation Dienstag ----------
-def get_tuesday_game():
-    week = datetime.now(berlin).isocalendar()[1]
-    block = (week // 2) % 2
-    return "🛸 Among Us" if block == 0 else "🦆 Goose Goose Duck"
-
-# ---------- Panel posten ----------
 async def post_poll(channel, text, event_dt):
     global last_poll_message, event_time, current_view
 
@@ -95,7 +93,9 @@ async def post_poll(channel, text, event_dt):
     last_poll_message = msg
     event_time = event_dt
 
-# ---------- Erinnerungen ----------
+
+# ================= REMINDER =================
+
 async def send_reminder(channel, text):
     if not current_view:
         return
@@ -106,7 +106,17 @@ async def send_reminder(channel, text):
         mentions = " ".join(f"<@{u}>" for u in participants)
         await channel.send(f"{text}\n{mentions}")
 
-# ---------- Scheduler ----------
+
+# ================= SPIELROTATION =================
+
+def get_tuesday_game():
+    week = datetime.now(berlin).isocalendar()[1]
+    block = (week // 2) % 2
+    return "🛸 Among Us" if block == 0 else "🦆 Goose Goose Duck"
+
+
+# ================= SCHEDULER =================
+
 @tasks.loop(minutes=1)
 async def scheduler():
     global event_time
@@ -138,31 +148,40 @@ async def scheduler():
         if timedelta(minutes=14) < delta <= timedelta(minutes=16):
             await send_reminder(channel, "⚡ Noch 15 Minuten!")
 
-# ---------- Start ----------
+
+# ================= SLASH TEST =================
+
+@bot.tree.command(name="testevent", description="Startet eine Test-Umfrage")
+async def testevent(interaction: discord.Interaction):
+
+    test_time = datetime.now(berlin) + timedelta(minutes=2)
+
+    await post_poll(
+        interaction.channel,
+        "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
+        test_time
+    )
+
+    await interaction.response.send_message(
+        "✅ Test-Umfrage erstellt!",
+        ephemeral=True
+    )
+
+
+# ================= START =================
+
 @bot.event
 async def on_ready():
-    global startup_test_sent
-
     print(f"Bot online als {bot.user}")
 
-    bot.add_view(EventView())
+    bot.add_view(EventView())  # wichtig für Buttons nach Neustart
     scheduler.start()
 
-    if not startup_test_sent:
-        startup_test_sent = True
-
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            test_time = datetime.now(berlin) + timedelta(minutes=2)
-
-            await post_poll(
-                channel,
-                "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
-                test_time
-            )
+    await bot.tree.sync()  # aktiviert Slash-Commands
 
 
 bot.run(TOKEN)
+
 
 
 
