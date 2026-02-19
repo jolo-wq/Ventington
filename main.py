@@ -5,7 +5,7 @@ import pytz
 
 import os
 TOKEN = os.getenv("TOKEN")
-CHANNEL_ID = 802618368804782080
+CHANNEL_ID = 803255642206240818
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -146,3 +146,4 @@ async def on_ready():
     scheduler.start()
 
 bot.run(TOKEN)
+
