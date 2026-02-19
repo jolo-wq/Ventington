@@ -174,15 +174,20 @@ async def testevent(interaction: discord.Interaction):
 async def on_ready():
     print(f"Bot online als {bot.user}")
 
-    bot.add_view(EventView())  # wichtig für Buttons nach Neustart
+    bot.add_view(EventView())
     scheduler.start()
 
-    guild = discord.Object(id=802618368804782080)
-await bot.tree.sync(guild=guild)
+    GUILD_ID = 802618368804782080
+    
+    guild = discord.Object(id=GUILD_ID)
+    await bot.tree.sync(guild=guild)
+
+    print("Slash-Commands synchronisiert!")
   
 
 
 bot.run(TOKEN)
+
 
 
 
