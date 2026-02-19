@@ -177,8 +177,8 @@ async def on_ready():
     bot.add_view(EventView())
     scheduler.start()
 
-    GUILD_ID = 802618368804782080  # deine Server-ID
-
+    GUILD_ID = 802618368804782080 
+    
 @bot.tree.command(
     name="testevent",
     description="Startet eine Test-Umfrage",
@@ -203,6 +203,7 @@ async def testevent(interaction: discord.Interaction):
 
 
 bot.run(TOKEN)
+
 
 
 
