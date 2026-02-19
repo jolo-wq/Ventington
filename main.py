@@ -1,12 +1,13 @@
 import discord
 from discord.ext import commands, tasks
-from discord import app_commands
 from datetime import datetime, timedelta
 import pytz
 import os
 
 TOKEN = os.getenv("TOKEN")
+
 CHANNEL_ID = 803255642206240818
+GUILD_ID = 802618368804782080  # 🔥 Server-ID
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -149,9 +150,13 @@ async def scheduler():
             await send_reminder(channel, "⚡ Noch 15 Minuten!")
 
 
-# ================= SLASH TEST =================
+# ================= SLASH TEST (SERVERGEBUNDEN) =================
 
-@bot.tree.command(name="testevent", description="Startet eine Test-Umfrage")
+@bot.tree.command(
+    name="testevent",
+    description="Startet eine Test-Umfrage",
+    guild=discord.Object(id=GUILD_ID)
+)
 async def testevent(interaction: discord.Interaction):
 
     test_time = datetime.now(berlin) + timedelta(minutes=2)
@@ -177,37 +182,13 @@ async def on_ready():
     bot.add_view(EventView())
     scheduler.start()
 
-    GUILD_ID = 802618368804782080 
-    
-@bot.tree.command(
-    name="testevent",
-    description="Startet eine Test-Umfrage",
-    guild=discord.Object(id=GUILD_ID)
-)
-async def testevent(interaction: discord.Interaction):
+    guild = discord.Object(id=GUILD_ID)
+    await bot.tree.sync(guild=guild)
 
-    test_time = datetime.now(berlin) + timedelta(minutes=2)
-
-    await post_poll(
-        interaction.channel,
-        "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
-        test_time
-    )
-
-    await interaction.response.send_message(
-        "✅ Test-Umfrage erstellt!",
-        ephemeral=True
-    )
-
-  
+    print("Slash-Commands synchronisiert!")
 
 
 bot.run(TOKEN)
-
-
-
-
-
 
 
 
