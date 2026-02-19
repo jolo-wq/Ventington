@@ -4,6 +4,51 @@ from datetime import datetime, timedelta
 import pytz
 
 import os
+current_view = None  # global für Reminder
+
+class EventView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.yes = set()
+        self.maybe = set()
+        self.no = set()
+
+    def remove_user(self, user_id):
+        self.yes.discard(user_id)
+        self.maybe.discard(user_id)
+        self.no.discard(user_id)
+
+    async def update_message(self, interaction):
+        embed = interaction.message.embeds[0]
+
+        yes_list = "\n".join(f"<@{u}>" for u in self.yes) or "-"
+        maybe_list = "\n".join(f"<@{u}>" for u in self.maybe) or "-"
+        no_list = "\n".join(f"<@{u}>" for u in self.no) or "-"
+
+        embed.set_field_at(0, name=f"👍 Zusagen ({len(self.yes)})", value=yes_list, inline=True)
+        embed.set_field_at(1, name=f"🤷 Vielleicht ({len(self.maybe)})", value=maybe_list, inline=True)
+        embed.set_field_at(2, name=f"❌ Absagen ({len(self.no)})", value=no_list, inline=True)
+
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="Zusagen", style=discord.ButtonStyle.green, emoji="👍")
+    async def yes_button(self, interaction, button):
+        self.remove_user(interaction.user.id)
+        self.yes.add(interaction.user.id)
+        await self.update_message(interaction)
+
+    @discord.ui.button(label="Vielleicht", style=discord.ButtonStyle.gray, emoji="🤷")
+    async def maybe_button(self, interaction, button):
+        self.remove_user(interaction.user.id)
+        self.maybe.add(interaction.user.id)
+        await self.update_message(interaction)
+
+    @discord.ui.button(label="Absagen", style=discord.ButtonStyle.red, emoji="❌")
+    async def no_button(self, interaction, button):
+        self.remove_user(interaction.user.id)
+        self.no.add(interaction.user.id)
+        await self.update_message(interaction)
+
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 803255642206240818
 
@@ -23,7 +68,7 @@ def get_tuesday_game():
 
 # ---------- Umfrage posten ----------
 async def post_poll(channel, text, event_dt):
-    global last_poll_message, event_time
+    global last_poll_message, event_time, current_view
 
     if last_poll_message:
         try:
@@ -31,10 +76,20 @@ async def post_poll(channel, text, event_dt):
         except:
             pass
 
-    msg = await channel.send(text)
-    await msg.add_reaction("👍")
-    await msg.add_reaction("🤷")
-    await msg.add_reaction("👎")
+    embed = discord.Embed(
+        title=text,
+        description=f"📅 Event um {event_dt.strftime('%A, %H:%M')}",
+        color=discord.Color.blue()
+    )
+
+    embed.add_field(name="👍 Zusagen (0)", value="-", inline=True)
+    embed.add_field(name="🤷 Vielleicht (0)", value="-", inline=True)
+    embed.add_field(name="❌ Absagen (0)", value="-", inline=True)
+
+    view = EventView()
+    current_view = view
+
+    msg = await channel.send(embed=embed, view=view)
 
     last_poll_message = msg
     event_time = event_dt
@@ -79,23 +134,13 @@ async def on_reaction_add(reaction, user):
 
 # ---------- Erinnerungen ----------
 async def send_reminder(channel, text):
-    if not last_poll_message:
+    if not current_view:
         return
 
-    yes, maybe = [], []
-
-    for reaction in last_poll_message.reactions:
-        users = [u async for u in reaction.users() if not u.bot]
-
-        if str(reaction.emoji) == "👍":
-            yes = users
-        elif str(reaction.emoji) == "🤷":
-            maybe = users
-
-    participants = yes + maybe
+    participants = list(current_view.yes | current_view.maybe)
 
     if participants:
-        mentions = " ".join(u.mention for u in participants)
+        mentions = " ".join(f"<@{u}>" for u in participants)
         await channel.send(f"{text}\n{mentions}")
 
 # ---------- Scheduler ----------
@@ -157,5 +202,6 @@ async def on_ready():
         )
 
 bot.run(TOKEN)
+
 
 
