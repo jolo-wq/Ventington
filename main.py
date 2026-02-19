@@ -169,6 +169,9 @@ async def scheduler():
 @bot.tree.command(name="testevent", description="Startet eine Test-Umfrage")
 async def testevent(interaction: discord.Interaction):
 
+    # 🔥 SOFORT bestätigen (wichtig!)
+    await interaction.response.defer(ephemeral=True)
+
     test_time = datetime.now(berlin) + timedelta(minutes=2)
 
     await post_poll(
@@ -177,10 +180,12 @@ async def testevent(interaction: discord.Interaction):
         test_time
     )
 
-    await interaction.response.send_message(
+    # 🔥 Nachträgliche Antwort
+    await interaction.followup.send(
         "✅ Test-Umfrage erstellt!",
         ephemeral=True
     )
+
 
 
 # ================= START =================
@@ -194,6 +199,7 @@ async def on_ready():
 
 
 bot.run(TOKEN)
+
 
 
 
