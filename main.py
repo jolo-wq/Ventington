@@ -145,7 +145,7 @@ async def on_ready():
 
     print(f"Bot online als {bot.user}")
 
-    bot.add_view(EventView())  # 🔥 macht Buttons persistent
+    bot.add_view(EventView())
     scheduler.start()
 
     if not startup_test_sent:
@@ -163,6 +163,7 @@ async def on_ready():
 
 
 bot.run(TOKEN)
+
 
 
 
