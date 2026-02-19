@@ -2,9 +2,10 @@ import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import pytz
-
 import os
-current_view = None  # global für Reminder
+
+current_view = None  # für Reminder
+startup_test_sent = False  # 🔥 verhindert doppelte Testumfragen
 
 class EventView(discord.ui.View):
     def __init__(self):
@@ -66,7 +67,7 @@ def get_tuesday_game():
     block = (week // 2) % 2
     return "🛸 Among Us" if block == 0 else "🦆 Goose Goose Duck"
 
-# ---------- Umfrage posten ----------
+# ---------- Panel posten ----------
 async def post_poll(channel, text, event_dt):
     global last_poll_message, event_time, current_view
 
@@ -93,7 +94,7 @@ async def post_poll(channel, text, event_dt):
 
     last_poll_message = msg
     event_time = event_dt
-    
+
 # ---------- Erinnerungen ----------
 async def send_reminder(channel, text):
     if not current_view:
@@ -115,26 +116,17 @@ async def scheduler():
     if not channel:
         return
 
-    # Mittwoch 00:01 -> Donnerstag
+    # Mittwoch -> Donnerstag
     if now.weekday() == 2 and now.hour == 0 and now.minute == 1:
         event_dt = now.replace(hour=19, minute=45)
-        await post_poll(
-            channel,
-            "🎲 Freier Spieleabend am Donnerstag, 19:45",
-            event_dt
-        )
+        await post_poll(channel, "🎲 Freier Spieleabend am Donnerstag, 19:45", event_dt)
 
-    # Freitag 00:01 -> Dienstag
+    # Freitag -> Dienstag
     if now.weekday() == 4 and now.hour == 0 and now.minute == 1:
         game = get_tuesday_game()
-        event_dt = now + timedelta(days=4)
-        event_dt = event_dt.replace(hour=19, minute=45)
+        event_dt = (now + timedelta(days=4)).replace(hour=19, minute=45)
 
-        await post_poll(
-            channel,
-            f"🎮 Spielabend am Dienstag, 19:45\nSpiel: {game}",
-            event_dt
-        )
+        await post_poll(channel, f"🎮 Spielabend am Dienstag, 19:45\nSpiel: {game}", event_dt)
 
     # Erinnerungen
     if event_time:
@@ -149,22 +141,26 @@ async def scheduler():
 # ---------- Start ----------
 @bot.event
 async def on_ready():
+    global startup_test_sent
+
     print(f"Bot online als {bot.user}")
     scheduler.start()
 
-    # 🧪 TEST-UMFRAGE SOFORT
-    channel = bot.get_channel(CHANNEL_ID)
-    if channel:
-        test_time = datetime.now(berlin) + timedelta(minutes=2)
+    # 🧪 TEST NUR EINMAL POSTEN
+    if not startup_test_sent:
+        startup_test_sent = True
 
-        await post_poll(
-            channel,
-            "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
-            test_time
-        )
+        channel = bot.get_channel(CHANNEL_ID)
+        if channel:
+            test_time = datetime.now(berlin) + timedelta(minutes=2)
+
+            await post_poll(
+                channel,
+                "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
+                test_time
+            )
 
 bot.run(TOKEN)
-
 
 
 
