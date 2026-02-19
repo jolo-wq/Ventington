@@ -144,9 +144,10 @@ async def on_ready():
     global startup_test_sent
 
     print(f"Bot online als {bot.user}")
+
+    bot.add_view(EventView())  # 🔥 macht Buttons persistent
     scheduler.start()
 
-    # 🧪 TEST NUR EINMAL POSTEN
     if not startup_test_sent:
         startup_test_sent = True
 
@@ -160,7 +161,9 @@ async def on_ready():
                 test_time
             )
 
+
 bot.run(TOKEN)
+
 
 
 
