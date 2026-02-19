@@ -177,10 +177,13 @@ async def on_ready():
     bot.add_view(EventView())  # wichtig für Buttons nach Neustart
     scheduler.start()
 
-    await bot.tree.sync()  # aktiviert Slash-Commands
+    guild = discord.Object(id=802618368804782080)
+await bot.tree.sync(guild=guild)
+  
 
 
 bot.run(TOKEN)
+
 
 
 
