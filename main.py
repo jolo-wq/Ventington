@@ -145,5 +145,17 @@ async def on_ready():
     print(f"Bot online als {bot.user}")
     scheduler.start()
 
+    # 🧪 TEST-UMFRAGE SOFORT
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        test_time = datetime.now(berlin) + timedelta(minutes=2)
+
+        await post_poll(
+            channel,
+            "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
+            test_time
+        )
+
 bot.run(TOKEN)
+
 
