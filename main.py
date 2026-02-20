@@ -7,25 +7,23 @@ import os
 TOKEN = os.getenv("TOKEN")
 
 CHANNEL_ID = 803255642206240818
-GUILD_ID = 802618368804782080  # Server-ID
+GUILD_ID = 802618368804782080
 
 berlin = pytz.timezone("Europe/Berlin")
 
 last_poll_message = None
 event_time = None
 current_view = None
+last_post_date = None  # 🔥 verhindert doppelte Posts pro Tag
 
 
-# ================= BOT MIT SETUP HOOK =================
+# ================= BOT =================
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
         guild = discord.Object(id=GUILD_ID)
-
-        # Slash-Commands sofort nur für diesen Server registrieren
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
-
         print("Slash-Commands synchronisiert!")
 
 
@@ -42,10 +40,10 @@ class EventView(discord.ui.View):
         self.maybe = set()
         self.no = set()
 
-    def remove_user(self, user_id):
-        self.yes.discard(user_id)
-        self.maybe.discard(user_id)
-        self.no.discard(user_id)
+    def remove_user(self, uid):
+        self.yes.discard(uid)
+        self.maybe.discard(uid)
+        self.no.discard(uid)
 
     async def update_message(self, interaction):
         embed = interaction.message.embeds[0]
@@ -79,10 +77,10 @@ class EventView(discord.ui.View):
         await self.update_message(interaction)
 
 
-# ================= PANEL POSTEN =================
+# ================= EVENT POST =================
 
 async def post_poll(channel, text, event_dt):
-    global last_poll_message, event_time, current_view
+    global last_poll_message, event_time, current_view, last_post_date
 
     if last_poll_message:
         try:
@@ -107,6 +105,7 @@ async def post_poll(channel, text, event_dt):
 
     last_poll_message = msg
     event_time = event_dt
+    last_post_date = datetime.now(berlin).date()
 
 
 # ================= REMINDER =================
@@ -115,10 +114,9 @@ async def send_reminder(channel, text):
     if not current_view:
         return
 
-    participants = list(current_view.yes | current_view.maybe)
-
-    if participants:
-        mentions = " ".join(f"<@{u}>" for u in participants)
+    users = list(current_view.yes | current_view.maybe)
+    if users:
+        mentions = " ".join(f"<@{u}>" for u in users)
         await channel.send(f"{text}\n{mentions}")
 
 
@@ -130,30 +128,33 @@ def get_tuesday_game():
     return "🛸 Among Us" if block == 0 else "🦆 Goose Goose Duck"
 
 
-# ================= SCHEDULER =================
+# ================= ROBUSTER SCHEDULER =================
 
 @tasks.loop(minutes=1)
 async def scheduler():
-    global event_time
+    global event_time, last_post_date
 
     now = datetime.now(berlin)
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
         return
 
-    # Mittwoch -> Donnerstag
-    if now.weekday() == 2 and now.hour == 0 and now.minute == 1:
-        event_dt = now.replace(hour=19, minute=45)
-        await post_poll(channel, "🎲 Freier Spieleabend am Donnerstag, 19:45", event_dt)
+    today = now.date()
 
-    # Freitag -> Dienstag
-    if now.weekday() == 4 and now.hour == 0 and now.minute == 1:
-        game = get_tuesday_game()
-        event_dt = (now + timedelta(days=4)).replace(hour=19, minute=45)
+    # 🔥 Mittwoch -> Donnerstag Event
+    if now.weekday() == 2 and now.hour == 0 and 0 <= now.minute <= 5:
+        if last_post_date != today:
+            event_dt = now.replace(hour=19, minute=45)
+            await post_poll(channel, "🎲 Freier Spieleabend am Donnerstag, 19:45", event_dt)
 
-        await post_poll(channel, f"🎮 Spielabend am Dienstag, 19:45\nSpiel: {game}", event_dt)
+    # 🔥 Freitag -> Dienstag Event
+    if now.weekday() == 4 and now.hour == 0 and 0 <= now.minute <= 5:
+        if last_post_date != today:
+            game = get_tuesday_game()
+            event_dt = (now + timedelta(days=4)).replace(hour=19, minute=45)
+            await post_poll(channel, f"🎮 Spielabend am Dienstag, 19:45\nSpiel: {game}", event_dt)
 
-    # Erinnerungen
+    # 🔔 Erinnerungen
     if event_time:
         delta = event_time - now
 
@@ -164,28 +165,37 @@ async def scheduler():
             await send_reminder(channel, "⚡ Noch 15 Minuten!")
 
 
-# ================= SLASH COMMAND =================
+# ================= FORCE COMMANDS =================
 
-@bot.tree.command(name="testevent", description="Startet eine Test-Umfrage")
-async def testevent(interaction: discord.Interaction):
-
-    # 🔥 SOFORT bestätigen (wichtig!)
+@bot.tree.command(name="forceevent", description="Startet Dienstag-Event sofort")
+async def forceevent(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
 
-    test_time = datetime.now(berlin) + timedelta(minutes=2)
+    game = get_tuesday_game()
+    event_dt = datetime.now(berlin) + timedelta(minutes=2)
 
     await post_poll(
         interaction.channel,
-        "🧪 TESTUMFRAGE — Funktioniert der Bot?\nEvent in 2 Minuten",
-        test_time
+        f"🎮 FORCED Spielabend (Dienstag)\nSpiel: {game}",
+        event_dt
     )
 
-    # 🔥 Nachträgliche Antwort
-    await interaction.followup.send(
-        "✅ Test-Umfrage erstellt!",
-        ephemeral=True
+    await interaction.followup.send("✅ Dienstag-Event gestartet!", ephemeral=True)
+
+
+@bot.tree.command(name="forcethursday", description="Startet Donnerstag-Event sofort")
+async def forcethursday(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+
+    event_dt = datetime.now(berlin) + timedelta(minutes=2)
+
+    await post_poll(
+        interaction.channel,
+        "🎲 FORCED Freier Spieleabend (Donnerstag)",
+        event_dt
     )
 
+    await interaction.followup.send("✅ Donnerstag-Event gestartet!", ephemeral=True)
 
 
 # ================= START =================
@@ -199,10 +209,6 @@ async def on_ready():
 
 
 bot.run(TOKEN)
-
-
-
-
 
 
 
