@@ -470,7 +470,7 @@ async def on_message(message: discord.Message):
             bot.loop.create_task(delete_codenames_later(cn_msg))
             # Ventington Chat
     if message.channel.id == VENTINGTON_CHAT_ID:
-        if gemini_model is None:
+        if gemini_client is None:
             await message.channel.send("*räusper* Es scheint als hätte jemand vergessen meinen Gemini-Schlüssel einzustecken. Wie unzivilisiert.* 🎩", delete_after=10)
         else:
             async with message.channel.typing():
