@@ -23,6 +23,13 @@ EINTRITT_CHANNEL_ID  = 802618368804782083   # 🤗eintritt
 CODES_CHANNEL_ID     = 802693019576172554   # 📟codes
 NEWS_CHANNEL_ID      = 1486757129338617956  # 📰news
 GUILD_ID             = 802618368804782080
+
+# Admin-Rollen
+ROLE_ADMIN      = 803262349526958140  # Admin
+ROLE_SEELSORGER = 874749577012592640  # Seelsorger
+ROLE_SHERIFF    = 802660295579009075  # Sheriff
+ROLE_ARCHITEKT  = 1081539714659651625 # Architekt
+ADMIN_ROLLEN    = {ROLE_ADMIN, ROLE_SEELSORGER, ROLE_SHERIFF, ROLE_ARCHITEKT}
 STATE_FILE           = "state.json"
 
 berlin = pytz.timezone("Europe/Berlin")
@@ -85,6 +92,15 @@ if "monatsbericht_msg_id" not in state: state["monatsbericht_msg_id"] = None
 
 current_view     = None
 current_event_day = None   # "dienstag" oder "donnerstag" — für Archiv
+
+
+# ================= BERECHTIGUNGEN =================
+
+def ist_admin(interaction: discord.Interaction) -> bool:
+    if not interaction.guild:
+        return False
+    rollen_ids = {r.id for r in interaction.user.roles}
+    return bool(rollen_ids & ADMIN_ROLLEN)
 
 
 # ================= BOT =================
@@ -910,6 +926,9 @@ async def scheduler():
 
 @bot.tree.command(name="dienstag", description="Erstellt manuell den Dienstag-Spielabend-Poll")
 async def cmd_dienstag(interaction: discord.Interaction):
+    if not ist_admin(interaction):
+        await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
+        return
     await interaction.response.defer(ephemeral=True)
     dt    = next_tuesday_1945()
     spiel = get_tuesday_game()
@@ -919,6 +938,9 @@ async def cmd_dienstag(interaction: discord.Interaction):
 
 @bot.tree.command(name="donnerstag", description="Erstellt manuell den Donnerstag-Spielabend-Poll")
 async def cmd_donnerstag(interaction: discord.Interaction):
+    if not ist_admin(interaction):
+        await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
+        return
     await interaction.response.defer(ephemeral=True)
     dt = next_thursday_1945()
     await post_poll(interaction.channel, "🎲 Freier Spieleabend am Donnerstag, 19:45", dt)
@@ -1279,6 +1301,9 @@ async def cmd_commands(interaction: discord.Interaction):
     passwort="Passwort fuer den Server (optional)"
 )
 async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, passwort: str = None):
+    if not ist_admin(interaction):
+        await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
+        return
     if interaction.channel_id != CODES_CHANNEL_ID:
         await interaction.response.send_message(
             "Dieser Befehl ist nur im codes-Channel erlaubt!",
