@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
-load_dotenv()import discord
+load_dotenv
+()import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import pytz
@@ -1229,7 +1230,7 @@ async def cmd_commands(interaction: discord.Interaction):
     )
     embed.add_field(
         name="Spielabend",
-        value="/dienstag - Dienstags-Poll manuell erstellen\n/donnerstag - Donnerstags-Poll manuell erstellen\n/kalender - Spielplan der naechsten 4 Wochen",
+        value="/kalender - Spielplan der naechsten 4 Wochen",
         inline=False
     )
     embed.add_field(
@@ -1334,6 +1335,34 @@ async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, pa
             save_state()
 
     bot.loop.create_task(delete_server_later(msg))
+
+
+# ================= MODDED =================
+
+@bot.tree.command(name="modded", description="Zeigt den Link zur aktuellen Among Us Mod-Version")
+async def cmd_modded(interaction: discord.Interaction):
+    if interaction.channel_id != QUACK_CHANNEL_ID:
+        await interaction.response.send_message(
+            "Dieser Befehl ist nur in quack-ecke erlaubt!",
+            ephemeral=True
+        )
+        return
+
+    embed = discord.Embed(
+        title="🛸 Among Us — Modded Version",
+        description="[Hier geht's zur aktuellen gemoddeten Version Among Us](https://discord.com/channels/802618368804782080/802618368804782084/1359223628415369518)",
+        color=discord.Color.red()
+    )
+    embed.set_footer(text="Loescht sich in 1 Minute automatisch.")
+
+    msg = await interaction.channel.send(embed=embed)
+    await interaction.response.send_message("Gepostet!", ephemeral=True)
+
+    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=1))
+    try:
+        await msg.delete()
+    except Exception:
+        pass
 
 
 # ================= START =================
