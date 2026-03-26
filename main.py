@@ -19,6 +19,7 @@ HIGHSCORE_CHANNEL_ID = 1484576122917228564  # 🏆highscores
 ARCHIV_CHANNEL_ID    = 1484937530297155715  # 🗄️archiv
 QUACK_CHANNEL_ID     = 802676292318527499   # 💬quack-ecke
 MITSPIELEN_CHANNEL_ID = 919537942026944522  # 🎮mitspielen
+EINTRITT_CHANNEL_ID  = 802618368804782083   # 🤗eintritt
 GUILD_ID             = 802618368804782080
 STATE_FILE           = "state.json"
 
@@ -242,7 +243,7 @@ async def post_vorschlag(channel, app_id: str, steam_url: str, vorschlagender: d
             existing = await channel.fetch_message(state["vorschlaege"][app_id]["message_id"])
             await channel.send(
                 f"⚠️ {vorschlagender.mention} Dieses Spiel wurde bereits vorgeschlagen! → {existing.jump_url}",
-                delete_after=15
+                delete_after=60
             )
         except Exception:
             pass
@@ -875,6 +876,243 @@ def get_tuesday_game_for_date(dt: datetime) -> str:
     weeks = max((dt - start).days, 0) // 7
     games = ["🛸 Among Us", "🛸 Among Us", "🦆 Goose Goose Duck", "🦆 Goose Goose Duck"]
     return games[weeks % len(games)]
+
+
+# ================= ROLLEN =================
+
+ROLLEN_GGD = {
+    "🪿 Goose (Crewmate)": """**Goose** — Standardrolle. Tasks machen & Ducks voten.
+**Adventurer** — Überlebt Umweltgefahren.
+**Astral** — Kann als Geist durch Wände fliegen.
+**Avenger** — Kann nach beobachtetem Kill zurücktöten.
+**Birdwatcher** — Sieht durch Wände, aber eingeschränkte Sicht.
+**Bodyguard** — Schützt Spieler und stirbt ggf. für ihn.
+**Canadian** — Wird beim Tod automatisch reported.
+**Celebrity** — Alle erfahren sofort, wenn du stirbst.
+**Detective** — Kann prüfen, ob jemand getötet hat.
+**Engineer** — Sieht Sabotagen + kann Vents nutzen.
+**Gravy** — Verdient „Belohnung" durch Tasks.
+**Locksmith** — Kann Türen jederzeit öffnen.
+**Lover** — Mit Partner verbunden – stirbt gemeinsam.
+**Medium** — Sieht Anzahl der Geister.
+**Mimic** — Wird von Ducks als Duck gesehen.
+**Mortician** — Kann Rolle von Leichen sehen.
+**Politician** — Gewinnt Ties / schwer rauszuwählen.
+**Sheriff** — Kann töten – falscher Kill = Tod.
+**Street Urchin** — Kann Schlösser von innen öffnen.
+**Stalker** — Verfolgt Spieler.
+**Tracker** — Verfolgt Bewegungen.
+**Vigilante** — Ein Kill pro Runde möglich.
+**Mechanic** — Kann Vents nutzen.
+**Technician** — Sieht Sabotagen (ähnlich Engineer).
+**Bounty** — Belohnung wenn früh gekillt.""",
+
+    "🦆 Duck (Impostor)": """**Duck** — Standard Impostor.
+**Assassin** — Kann im Meeting töten (Role guess).
+**Morphling** — Verwandelt sich in andere Spieler.
+**Cannibal** — Kann Leichen essen.
+**Demolitionist** — Platziert Bomben auf Spielern.
+**Hitman** — Hat Ziel für Bonus.
+**Invisibility Duck** — Kann unsichtbar werden.
+**Professional** — Leichen unsichtbar.
+**Saboteur** — Stärkere Sabotagen.
+**Spy** — Sieht Rollen durch Voting.
+**Silencer** — Kann Spieler stumm schalten.
+**Undertaker** — Kann Leichen bewegen.
+**Miner** — Erstellt neue Vents.
+**Cleaner** — Entfernt Leichen komplett.
+**Party Duck** — Verzerrt Stimmen (chaotisch).
+**Ninja** — Leiser Kill.
+**Swooper** — Unsichtbar für kurze Zeit.
+**Godfather** — Leader der Ducks.""",
+
+    "🎭 Neutral": """**Dodo** — Gewinnt, wenn rausgevotet.
+**Dueling Dodo** — Zwei Dodos – einer muss sterben.
+**Falcon** — Letzter Überlebender gewinnt.
+**Vulture** — Frisst Leichen zum Sieg.
+**Pigeon** — Infiziert alle Spieler.
+**Pelican** — Verschluckt Spieler.
+**Arsonist** — Markiert + zündet alle.
+**Serial Killer** — Tötet unabhängig."""
+}
+
+ROLLEN_AU = {
+    "👨‍🚀 Crewmate": """**Crewmate** — Standard.
+**Sheriff** — Kann Impostor töten.
+**Engineer** — Kann venten.
+**Medic** — Schützt Spieler.
+**Detective** — Findet Infos nach Kills.
+**Time Master** — Spult Zeit zurück.
+**Mayor** — Mehr Stimmen.
+**Swapper** — Tauscht Votes.
+**Seer** — Sieht Rollen.
+**Hacker** — Sieht Infos / Admin erweitern.
+**Tracker** — Verfolgt Spieler.
+**Snitch** — Sieht Impostor bei fast fertigen Tasks.
+**Spy** — Sieht Infos über Impostors.
+**Security Guard** — Kann Türen schließen / blocken.
+**Medium** — Spricht mit Toten.
+**Trapper** — Stellt Fallen.
+**Veteran** — Kann sich verteidigen (Kill Angreifer).""",
+
+    "🔪 Impostor": """**Impostor** — Standard.
+**Morphling** — Verwandlung.
+**Camouflager** — Alle sehen gleich aus.
+**Janitor** — Entfernt Leichen.
+**Miner** — Erstellt Vents.
+**Undertaker** — Zieht Leichen.
+**Assassin** — Kill im Meeting.
+**Vampire** — Delayed Kill.
+**Warlock** — Zwingt andere zu killen.
+**Cleaner** — Entfernt Beweise.
+**Bounty Hunter** — Hat Targets.
+**Trickster** — Fake Vents.
+**Bomber** — Bomben legen.
+**Eraser** — Löscht Rollen.""",
+
+    "🎭 Neutral": """**Jester** — Gewinnt durch rausvoten.
+**Executioner** — Muss Ziel voten lassen.
+**Arsonist** — Markieren + anzünden.
+**Jackal** — Eigenes Killer-Team.
+**Sidekick** — Helfer vom Jackal.
+**Vulture** — Frisst Leichen.
+**Lawyer** — Schützt Ziel.
+**Pursuer** — Upgrade vom Lawyer.
+**Serial Killer** — Solo Killer.
+**Lover** — Verbundene Spieler."""
+}
+
+
+@bot.tree.command(name="rollen", description="Zeigt alle Rollen für Among Us oder Goose Goose Duck")
+@discord.app_commands.describe(spiel="Welches Spiel?")
+@discord.app_commands.choices(spiel=[
+    discord.app_commands.Choice(name="🛸 Among Us",        value="au"),
+    discord.app_commands.Choice(name="🦆 Goose Goose Duck", value="ggd"),
+])
+async def cmd_rollen(interaction: discord.Interaction, spiel: str):
+    await interaction.response.defer(ephemeral=True)
+
+    if spiel == "ggd":
+        titel  = "🦆 Goose Goose Duck — Alle Rollen"
+        farbe  = discord.Color.yellow()
+        rollen = ROLLEN_GGD
+    else:
+        titel  = "🛸 Among Us — Alle Rollen"
+        farbe  = discord.Color.red()
+        rollen = ROLLEN_AU
+
+    msgs = []
+    first = True
+    for kategorie, text in rollen.items():
+        embed = discord.Embed(color=farbe)
+        if first:
+            embed.title = titel
+            first = False
+        embed.add_field(name=kategorie, value=text, inline=False)
+        embed.set_footer(text="Löscht sich in 2 Minuten automatisch.")
+        msg = await interaction.channel.send(embed=embed)
+        msgs.append(msg)
+
+    await interaction.followup.send("✅ Rollen gepostet!", ephemeral=True)
+
+    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=2))
+    for msg in msgs:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+
+# ================= REGELN =================
+
+SPIELREGELN = """**1.** Während der Runden muten sich alle, da die meisten nicht im Vollmute sind.
+
+**2.** Wer tot ist, ist tot und darf erst wieder reden wenn der Endbildschirm zu sehen ist. Auch Privatnachrichten während des Games mit Spielbezug sind verboten.
+
+**3.** Fragen zu Aufgaben oder Rollen bitte möglichst erst nach der Runde stellen.
+
+**4.** Wer rausgevotet wird, called bitte nicht seine Rolle.
+
+**5.** Wenn man bei GGD Pelikan ist, darf man nicht die Glocke betätigen. Verstoß wird mit sofortigem Rausvoten geahndet. Außerdem wird mindestens AllKiller einen Tag lang sauer auf dich sein. 🔔
+
+**6.** Wer 3x hintereinander in der ersten Runde als erstes gekillt wird, darf seinen Mörder outcallen. Versucht drauf zu achten, dass nicht immer dieselben als erstes gekillt werden."""
+
+SERVERREGELN = """**1.** Nur Admins können Leute einladen. Bitte nur Leute einladen, die ihr kennt und die in unsere Runde passen.
+
+**2.** In unsere Runde passt man wenn: man mindestens volljährig ist (lieber über 20), sich angemessen ausdrücken kann, nicht beleidigt und ein Mikro mit angemessener Soundqualität hat.
+
+**3.** Jede Woche erscheint eine Terminabfrage. Bitte möglichst frühzeitig zu- oder absagen. Wer nicht eingetragen ist wenn die Gruppe voll ist, kann an dem Abend nicht mitspielen.
+
+**4.** Updates werden immer vorher abgesprochen. Bitte nicht einfach updaten ohne Absprache. Wer mit anderen Gruppen updated, bitte den alten Ordner behalten.
+
+**5.** Bitte möglichst pünktlich um **19:45 Uhr** am Spieltag im Sprachkanal sein. Falls ihr nicht reinkommt, kurz in der Quack-Ecke Bescheid geben wenn ihr später kommt.
+
+**6.** Wenn jemand streamt, kurz Bescheid sagen wenn alle da sind — oder vorher in der Quack-Ecke. Normalerweise sind alle fein damit.
+
+**7.** Wer streamt, schummelt selbstverständlich nicht durch Gucken des eigenen Streams.
+
+**8.** Wenn Randoms beim Stream fragen ob sie mitspielen können: Wir spielen nur mit Leuten die wir kennen. Nette Dauergäste können wir aber über eine Einladung reden. 😊"""
+
+
+@bot.tree.command(name="regeln", description="Zeigt die Spiel- und Serverregeln")
+async def cmd_regeln(interaction: discord.Interaction):
+    if interaction.channel_id != QUACK_CHANNEL_ID:
+        await interaction.response.send_message(
+            "❌ Dieser Befehl ist nur in 💬quack-ecke erlaubt!",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    embed1 = discord.Embed(
+        title="🎮 Spielregeln",
+        description=SPIELREGELN,
+        color=discord.Color.blue()
+    )
+    embed1.set_footer(text="Löscht sich in 2 Minuten automatisch.")
+
+    embed2 = discord.Embed(
+        title="🖥️ Serverregeln",
+        description=SERVERREGELN,
+        color=discord.Color.green()
+    )
+    embed2.set_footer(text="Löscht sich in 2 Minuten automatisch.")
+
+    msg1 = await interaction.channel.send(embed=embed1)
+    msg2 = await interaction.channel.send(embed=embed2)
+
+    await interaction.followup.send("✅ Regeln gepostet!", ephemeral=True)
+
+    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=2))
+    for msg in (msg1, msg2):
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+
+# ================= BEGRÜSSUNG =================
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    channel = bot.get_channel(EINTRITT_CHANNEL_ID)
+    if not channel:
+        return
+
+    embed = discord.Embed(
+        title=f"👋 Willkommen auf Among Goose, {member.display_name}!",
+        description=(
+            f"Hey {member.mention}! Schön dass du da bist! 🎉\n\n"
+            f"Schau dich gerne um und lies die Regeln in der 💬quack-ecke mit `/regeln`.\n"
+            f"Bei Fragen einfach melden — wir beißen nicht. Meistens. 🦆"
+        ),
+        color=discord.Color.og_blurple()
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.set_footer(text=f"Mitglied #{member.guild.member_count}")
+
+    await channel.send(embed=embed)
 
 
 # ================= START =================
