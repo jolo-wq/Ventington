@@ -1440,6 +1440,143 @@ async def steam_news_checker():
     save_state()
 
 
+# ================= RANDOM =================
+
+@bot.tree.command(name="random", description="Waehlt ein zufaelliges Spiel aus den Vorschlaegen")
+async def cmd_random(interaction: discord.Interaction):
+    if interaction.channel_id not in (QUACK_CHANNEL_ID, MITSPIELEN_CHANNEL_ID):
+        await interaction.response.send_message(
+            "❌ Dieser Befehl ist nur in 💬quack-ecke und 🎮mitspielen erlaubt!",
+            ephemeral=True
+        )
+        return
+
+    kandidaten = [
+        (aid, d) for aid, d in state["vorschlaege"].items()
+        if len(d.get("hat", [])) + len(d.get("spielen", [])) >= 1
+    ]
+
+    if not kandidaten:
+        await interaction.response.send_message(
+            "😢 Noch keine Spielvorschlaege mit Interesse — postet Steam-Links in spielvorschlaege!",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer()
+
+    import asyncio
+    loading_texts = ["🎰 Das Rad dreht sich...", "🎰 Noch laeuft es...", "🎰 Fast...", "🎲 Und das Ergebnis ist..."]
+    msg = await interaction.followup.send(loading_texts[0])
+    for text in loading_texts[1:]:
+        await asyncio.sleep(1)
+        await msg.edit(content=text)
+    await asyncio.sleep(1)
+
+    aid, data = random.choice(kandidaten)
+    titel   = data.get("title", "Unbekannt")
+    url     = data.get("url", "")
+    image   = data.get("image", "")
+    hat     = len(data.get("hat", []))
+    spielen = len(data.get("spielen", []))
+
+    embed = discord.Embed(
+        title=f"🎲 Zufallsspiel: {titel}",
+        url=url,
+        description=f"**{hat + spielen}** Leute wuerden das spielen!",
+        color=discord.Color.gold()
+    )
+    if image:
+        embed.set_image(url=image)
+    embed.add_field(name="✅ Haben es schon", value=str(hat),     inline=True)
+    embed.add_field(name="👍 Wuerden spielen", value=str(spielen), inline=True)
+
+    await msg.edit(content="", embed=embed)
+
+
+# ================= KALENDER =================
+
+@bot.tree.command(name="kalender", description="Zeigt den Spielplan fuer die naechsten 4 Wochen")
+async def cmd_kalender(interaction: discord.Interaction):
+    if interaction.channel_id not in (QUACK_CHANNEL_ID, MITSPIELEN_CHANNEL_ID):
+        await interaction.response.send_message(
+            "❌ Dieser Befehl ist nur in 💬quack-ecke und 🎮mitspielen erlaubt!",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer()
+
+    now   = datetime.now(berlin)
+    lines = []
+    check = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    events_found = 0
+
+    while events_found < 8:
+        if check.weekday() == 1:
+            spiel = get_tuesday_game_for_date(check)
+            datum = check.strftime("%d.%m.")
+            woche = check.strftime("KW %W")
+            lines.append(f"🟦 **Di {datum}** ({woche}) — 🎮 {spiel}")
+            events_found += 1
+        elif check.weekday() == 3:
+            datum = check.strftime("%d.%m.")
+            woche = check.strftime("KW %W")
+            lines.append(f"🟧 **Do {datum}** ({woche}) — 🎲 Freie Spielwahl")
+            events_found += 1
+        check += timedelta(days=1)
+
+    embed = discord.Embed(
+        title="📅 Spielplan — Naechste 4 Wochen",
+        description="\n".join(lines),
+        color=discord.Color.teal()
+    )
+    embed.set_footer(text="🟦 Dienstag  |  🟧 Donnerstag  •  Loescht sich in 5 Minuten")
+
+    msg = await interaction.followup.send(embed=embed)
+    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=5))
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+
+# ================= PROFILE =================
+
+@bot.tree.command(name="profile", description="Zeigt deine persoenlichen Spieleabend-Stats")
+async def cmd_profile(interaction: discord.Interaction):
+    uid = str(interaction.user.id)
+    di  = state["highscores"]["dienstag"].get(uid, 0)
+    do  = state["highscores"]["donnerstag"].get(uid, 0)
+    s   = state["streaks"].get(uid, {"current": 0, "best": 0})
+
+    archiv       = state.get("archiv", [])
+    total_events = len(archiv)
+    dabei_events = sum(1 for e in archiv if uid in [str(x) for x in e.get("spieler", [])])
+    quote        = round((dabei_events / total_events * 100)) if total_events > 0 else 0
+
+    erstes = next(
+        (e["datum"] for e in archiv if uid in [str(x) for x in e.get("spieler", [])]),
+        None
+    )
+
+    embed = discord.Embed(
+        title=f"👤 Profil: {interaction.user.display_name}",
+        color=interaction.user.accent_color or discord.Color.blurple()
+    )
+    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    embed.add_field(name="🟦 Dienstag-Zusagen",   value=str(di),                  inline=True)
+    embed.add_field(name="🟧 Donnerstag-Zusagen", value=str(do),                  inline=True)
+    embed.add_field(name="⭐ Gesamt",             value=str(di + do),              inline=True)
+    embed.add_field(name="🔥 Aktuelle Streak",    value=str(s.get("current", 0)), inline=True)
+    embed.add_field(name="🏅 Beste Streak",       value=str(s.get("best", 0)),    inline=True)
+    embed.add_field(name="📊 Teilnahmequote",     value=f"{quote}% ({dabei_events}/{total_events})", inline=True)
+    if erstes:
+        embed.add_field(name="📅 Erstes Event dabei", value=erstes, inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 # ================= MAPS =================
 
 @bot.tree.command(name="maps", description="Zeigt alle Maps fuer Among Us oder Goose Goose Duck")
