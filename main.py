@@ -21,6 +21,7 @@ QUACK_CHANNEL_ID     = 802676292318527499   # 💬quack-ecke
 MITSPIELEN_CHANNEL_ID = 919537942026944522  # 🎮mitspielen
 EINTRITT_CHANNEL_ID  = 802618368804782083   # 🤗eintritt
 CODES_CHANNEL_ID     = 802693019576172554   # 📟codes
+NEWS_CHANNEL_ID      = 1486757129338617956  # 📰news
 GUILD_ID             = 802618368804782080
 STATE_FILE           = "state.json"
 
@@ -77,6 +78,7 @@ if "reminder_msg_ids" not in state: state["reminder_msg_ids"] = []
 if "last_code_message_id" not in state: state["last_code_message_id"] = None
 if "last_codenames_message_id" not in state: state["last_codenames_message_id"] = None
 if "last_server_message_id" not in state: state["last_server_message_id"] = None
+if "posted_news" not in state: state["posted_news"] = []  # Liste von bereits geposteten News-IDs
 if "verwarnungen" not in state: state["verwarnungen"] = {}  # uid -> {"count": int, "timestamp": str}
 if "archiv"         not in state: state["archiv"]         = []
 if "monatsbericht_msg_id" not in state: state["monatsbericht_msg_id"] = None
@@ -1159,9 +1161,11 @@ async def on_member_join(member: discord.Member):
     embed = discord.Embed(
         title=f"👋 Willkommen auf Among Goose, {member.display_name}!",
         description=(
-            f"Hey {member.mention}! Schön dass du da bist! 🎉\n\n"
-            f"Schau dich gerne um und lies die Regeln in der 💬quack-ecke mit `/regeln`.\n"
-            f"Bei Fragen einfach melden — wir beißen nicht. Meistens. 🦆"
+            f"Hey {member.mention}! Schoen dass du da bist! 🎉\n\n"
+            f"Schau dich gerne um und lies die Regeln in der 💬quack-ecke mit `/regeln`.\n\n"
+            f"Falls du nicht weisst wo du anfangen sollst — ich, Ventington, stehe dir gerne zur Seite! "
+            f"Einfach `/commands` eingeben und ich zeige dir alles was ich kann. 🤖\n\n"
+            f"Bei weiteren Fragen einfach die anderen ansprechen — wir beissen nicht. Meistens. 🦆"
         ),
         color=discord.Color.og_blurple()
     )
@@ -1229,28 +1233,28 @@ async def cmd_commands(interaction: discord.Interaction):
         color=discord.Color.og_blurple()
     )
     embed.add_field(
-        name="Spielabend",
-        value="/kalender - Spielplan der naechsten 4 Wochen",
+        name="📅 Spielabend",
+        value="`/kalender` \u2014 Spielplan der naechsten 4 Wochen",
         inline=False
     )
     embed.add_field(
-        name="Spiele",
-        value="/random - Zufaelliges Spiel aus den Vorschlaegen waehlen\n/rollen - Alle Rollen fuer Among Us oder Goose Goose Duck",
+        name="🎲 Spiele",
+        value="`/random` \u2014 Zufaelliges Spiel\n`/rollen` \u2014 Rollen fuer AU oder GGD\n`/maps` \u2014 Maps & Wiki-Links",
         inline=False
     )
     embed.add_field(
-        name="Stats & Highscores",
-        value="/profile - Deine persoenlichen Spieleabend-Stats",
+        name="📊 Stats",
+        value="`/profile` \u2014 Deine persoenlichen Stats",
         inline=False
     )
     embed.add_field(
-        name="Server-Info",
-        value="/regeln - Server- & Spielregeln anzeigen\n/commands - Diese Uebersicht",
+        name="🖥️ Server-Info",
+        value="`/regeln` \u2014 Server- & Spielregeln\n`/modded` \u2014 Among Us Mod-Link\n`/game` \u2014 Spielserver posten\n`/commands` \u2014 Diese Uebersicht",
         inline=False
     )
     embed.add_field(
-        name="Hinweis",
-        value="/random & /kalender nur in quack-ecke & mitspielen\n/regeln nur in quack-ecke",
+        name="⚠️ Nur in bestimmten Channels",
+        value="`/random` `/kalender` \u2192 quack-ecke & mitspielen\n`/regeln` `/modded` \u2192 quack-ecke\n`/game` \u2192 codes",
         inline=False
     )
     embed.set_footer(text="Loescht sich in 60 Sekunden automatisch.")
@@ -1355,10 +1359,180 @@ async def cmd_modded(interaction: discord.Interaction):
     )
     embed.set_footer(text="Loescht sich in 1 Minute automatisch.")
 
-    msg = await interaction.channel.send(embed=embed)
+    msg_vor  = await interaction.channel.send("⬇️ Der Link unten führt direkt zu einer Datei in unserem Discord-Chat — einfach draufklicken und runterladen!")
+    msg      = await interaction.channel.send(embed=embed)
+    msg_nach = await interaction.channel.send("☝️ Einfach auf den Link klicken — die Datei liegt direkt hier im Server!")
     await interaction.response.send_message("Gepostet!", ephemeral=True)
 
     await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=1))
+    for m in (msg_vor, msg, msg_nach):
+        try:
+            await m.delete()
+        except Exception:
+            pass
+
+
+# ================= STEAM NEWS =================
+
+STEAM_NEWS_APPS = {
+    945360:  ("🛸 Among Us",        discord.Color.red()),
+    1568590: ("🦆 Goose Goose Duck", discord.Color.yellow()),
+}
+
+async def fetch_steam_news(app_id: int):
+    url = f"https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid={app_id}&count=5&format=json"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json()
+                return data.get("appnews", {}).get("newsitems", [])
+    except Exception:
+        return []
+
+
+@tasks.loop(minutes=30)
+async def steam_news_checker():
+    channel = bot.get_channel(NEWS_CHANNEL_ID)
+    if not channel:
+        return
+
+    posted = state.get("posted_news", [])
+
+    for app_id, (spiel_name, farbe) in STEAM_NEWS_APPS.items():
+        news_items = await fetch_steam_news(app_id)
+        for item in news_items:
+            gid = item.get("gid", "")
+            if gid in posted:
+                continue
+
+            titel = item.get("title", "Kein Titel")
+            url   = item.get("url", "")
+            datum = datetime.fromtimestamp(item.get("date", 0), tz=berlin).strftime("%d.%m.%Y %H:%M")
+
+            # Beschreibung kürzen und HTML entfernen
+            import re as _re
+            beschreibung = item.get("contents", "")
+            beschreibung = _re.sub(r'<[^>]+>', '', beschreibung)
+            beschreibung = beschreibung[:300] + "..." if len(beschreibung) > 300 else beschreibung
+
+            embed = discord.Embed(
+                title=f"{spiel_name} — {titel}",
+                url=url,
+                description=beschreibung,
+                color=farbe
+            )
+            embed.set_footer(text=f"📅 {datum}")
+
+            await channel.send(embed=embed)
+            posted.append(gid)
+
+    state["posted_news"] = posted[-200:]  # Max 200 IDs behalten
+    save_state()
+
+
+# ================= MAPS =================
+
+@bot.tree.command(name="maps", description="Zeigt alle Maps fuer Among Us oder Goose Goose Duck")
+@discord.app_commands.describe(spiel="Welches Spiel?")
+@discord.app_commands.choices(spiel=[
+    discord.app_commands.Choice(name="🛸 Among Us",         value="au"),
+    discord.app_commands.Choice(name="🦆 Goose Goose Duck", value="ggd"),
+])
+async def cmd_maps(interaction: discord.Interaction, spiel: str):
+    await interaction.response.defer(ephemeral=True)
+
+    if spiel == "au":
+        embed = discord.Embed(
+            title="🛸 Among Us — Alle Maps",
+            color=discord.Color.red()
+        )
+        embed.add_field(
+            name="🗺️ The Skeld",
+            value="[Wiki-Link](https://among-us.fandom.com/wiki/The_Skeld) — Das Original. Raumschiff mit 14 Locations und Sicherheitskameras.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ MIRA HQ",
+            value="[Wiki-Link](https://among-us.fandom.com/wiki/MIRA_HQ) — Kleinste Map. Alle Vents verbunden, keine Kameras.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Polus",
+            value="[Wiki-Link](https://among-us.fandom.com/wiki/Polus) — Groesste klassische Map. Outdoor-Bereich, Vitals-Monitor.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ The Airship",
+            value="[Wiki-Link](https://among-us.fandom.com/wiki/The_Airship) — Groesste Map insgesamt. 21 Locations, kein Spawn-Punkt.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ The Fungle",
+            value="[Wiki-Link](https://among-us.fandom.com/wiki/The_Fungle) — Dschungel-Map. Pilze, Sporen-Sabotage, 18 Locations.",
+            inline=False
+        )
+        embed.add_field(
+            name="📚 Alle Maps im Ueberblick",
+            value="[Among Us Wiki — Maps](https://among-us.fandom.com/wiki/Maps)",
+            inline=False
+        )
+    else:
+        embed = discord.Embed(
+            title="🦆 Goose Goose Duck — Alle Maps",
+            color=discord.Color.yellow()
+        )
+        embed.add_field(
+            name="🗺️ S.S. Mother Goose",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/S.S._Mother_Goose) — Raumschiff, kurze Gaenge, Cargo Bay Falle.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Black Swan",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/Black_Swan) — Engste Map. Raumstation, Cargo Bay.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Nexus Colony",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/Nexus_Colony) — Zwei Gebaeude mit Teleporter verbunden.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Mallard Manor",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/Mallard_Manor) — Herrenhaus. Keine Vents, dafuer Verstecke.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Goosechapel",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/Goosechapel) — Viktorianisches Dorf bei Nacht. Gericht als Meeting-Ort.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Jungle Temple",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/Jungle_Temple) — Tempel mit Todesfallen-Sabotagen.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ The Basement",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/The_Basement) — Unterirdisch, Guckloecher, Teleporter.",
+            inline=False
+        )
+        embed.add_field(
+            name="🗺️ Ancient Sands",
+            value="[Wiki-Link](https://goose-goose-duck.fandom.com/wiki/Ancient_Sands) — Wueste mit Mumien-Sabotage.",
+            inline=False
+        )
+        embed.add_field(
+            name="📚 Alle Maps im Ueberblick",
+            value="[Goose Goose Duck Wiki — Maps](https://goose-goose-duck.fandom.com/wiki/Maps)",
+            inline=False
+        )
+
+    embed.set_footer(text="Loescht sich in 1 Stunde automatisch.")
+
+    msg = await interaction.channel.send(embed=embed)
+    await interaction.followup.send("Maps gepostet!", ephemeral=True)
+
+    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(hours=1))
     try:
         await msg.delete()
     except Exception:
@@ -1384,6 +1558,7 @@ async def on_ready():
         bot.add_view(make_vorschlag_view(app_id))
 
     scheduler.start()
+    steam_news_checker.start()
     print(f"Scheduler gestartet. {len(state.get('vorschlaege', {}))} Spielvorschlag-Views registriert.")
 
 
