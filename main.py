@@ -481,7 +481,8 @@ async def on_message(message: discord.Message):
                 verlauf = chat_sessions[uid][-10:]
                 verlauf.append({"role": "user", "parts": [message.content]})
                 try:
-                    prompt = VENTINGTON_SYSTEM_PROMPT + "\n\nGespraech:\n"
+                    heute = datetime.now(berlin).strftime("%A, %d.%m.%Y %H:%M Uhr")
+                    prompt = VENTINGTON_SYSTEM_PROMPT + f"\n\nHeutiges Datum und Uhrzeit: {heute}\n\nGespraech:\n"
                     for eintrag in verlauf:
                         rolle = "Nutzer" if eintrag["role"] == "user" else "Ventington"
                         prompt += f"{rolle}: {eintrag['parts'][0]}\n"
