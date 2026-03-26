@@ -1114,13 +1114,6 @@ SERVERREGELN = """**1.** Nur Admins können Leute einladen. Bitte nur Leute einl
 
 @bot.tree.command(name="regeln", description="Zeigt die Spiel- und Serverregeln")
 async def cmd_regeln(interaction: discord.Interaction):
-    if interaction.channel_id != QUACK_CHANNEL_ID:
-        await interaction.response.send_message(
-            "❌ Dieser Befehl ist nur in 💬quack-ecke erlaubt!",
-            ephemeral=True
-        )
-        return
-
     await interaction.response.defer(ephemeral=True)
 
     embed1 = discord.Embed(
@@ -1348,13 +1341,6 @@ async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, pa
 
 @bot.tree.command(name="modded", description="Zeigt den Link zur aktuellen Among Us Mod-Version")
 async def cmd_modded(interaction: discord.Interaction):
-    if interaction.channel_id != QUACK_CHANNEL_ID:
-        await interaction.response.send_message(
-            "Dieser Befehl ist nur in quack-ecke erlaubt!",
-            ephemeral=True
-        )
-        return
-
     embed = discord.Embed(
         title="🛸 Among Us — Modded Version",
         description="[Hier geht's zur aktuellen gemoddeten Version Among Us](https://discord.com/channels/802618368804782080/802618368804782084/1359223628415369518)",
