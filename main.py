@@ -487,7 +487,7 @@ async def on_message(message: discord.Message):
                         prompt += f"{rolle}: {eintrag['parts'][0]}\n"
                     prompt += "Ventington:"
                     antwort = gemini_client.models.generate_content(
-                        model="gemini-3.1-flash-lite",
+                        model="gemini-3.1-flash-lite-preview",
                         contents=prompt
                     )
                     antwort_text = antwort.text.strip()
@@ -1429,7 +1429,7 @@ async def steam_news_checker():
             if gemini_client and beschreibung:
                 try:
                     uebersetzung = gemini_client.models.generate_content(
-                        model="gemini-3.1-flash-lite",
+                        model="gemini-3.1-flash-lite-preview",
                         contents=f"Übersetze diesen Gaming-News-Text ins Deutsche. Nur die Übersetzung, kein Kommentar:\n\n{beschreibung}"
                     )
                     embed.description = uebersetzung.text.strip()
