@@ -70,6 +70,7 @@ EINTRITT_CHANNEL_ID  = 1486773005412732959  # 🤗eintritt (neu)
 CODES_CHANNEL_ID     = 802693019576172554   # 📟codes
 NEWS_CHANNEL_ID      = 1486757129338617956  # 📰news
 VENTINGTON_CHAT_ID   = 1484945985749651577  # 🎩ventington
+VOICE_CHANNEL_IDS    = {802618368804782084, 802651629933297724, 874761775319482478}  # On Air, Vent, Therapie
 GUILD_ID             = 802618368804782080
 
 # Admin-Rollen
@@ -1553,7 +1554,7 @@ async def steam_news_checker():
 
 # ================= RANDOM =================
 
-@bot.tree.command(name="random", description="Waehlt ein zufaelliges Spiel aus den Vorschlaegen")
+@bot.tree.command(name="random", description="Waehlt ein zufaelliges Spiel basierend auf den Anwesenden")
 async def cmd_random(interaction: discord.Interaction):
     if interaction.channel_id not in (QUACK_CHANNEL_ID, MITSPIELEN_CHANNEL_ID):
         await interaction.response.send_message(
@@ -1562,22 +1563,63 @@ async def cmd_random(interaction: discord.Interaction):
         )
         return
 
-    kandidaten = [
-        (aid, d) for aid, d in state["vorschlaege"].items()
-        if len(d.get("hat", [])) + len(d.get("spielen", [])) >= 1
-    ]
+    await interaction.response.defer()
+
+    # Wer ist gerade in einem Voice-Channel?
+    guild = interaction.guild
+    anwesende = set()
+    for vc_id in VOICE_CHANNEL_IDS:
+        vc = guild.get_channel(vc_id)
+        if vc:
+            for member in vc.members:
+                if not member.bot:
+                    anwesende.add(member.id)
+
+    import asyncio
+
+    # Spiele filtern basierend auf Anwesenden
+    if anwesende:
+        kandidaten = []
+        for aid, d in state["vorschlaege"].items():
+            hat     = set(d.get("hat",     []))
+            spielen = set(d.get("spielen", []))
+            nein    = set(d.get("nein",    []))
+
+            positiv  = len((hat | spielen) & anwesende)
+            negativ  = len(nein & anwesende)
+            netto    = positiv - negativ
+
+            if netto > 0 and positiv > len(anwesende) / 2:
+                kandidaten.append((aid, d, netto))
+
+        kandidaten.sort(key=lambda x: x[2], reverse=True)
+        kandidaten = [(aid, d) for aid, d, _ in kandidaten]
+
+        if not kandidaten:
+            # Fallback: alle mit mind. 1 positiv
+            kandidaten = [
+                (aid, d) for aid, d in state["vorschlaege"].items()
+                if len(set(d.get("hat", [])) | set(d.get("spielen", []))) >= 1
+            ]
+            voice_info = f"🎙️ {len(anwesende)} Personen im Voice — kein Spiel passt für alle, zeige allgemeine Vorschläge."
+        else:
+            voice_info = f"🎙️ Gefiltert für **{len(anwesende)} Personen** im Voice-Channel."
+    else:
+        # Niemand im Voice — alle Vorschläge
+        kandidaten = [
+            (aid, d) for aid, d in state["vorschlaege"].items()
+            if len(d.get("hat", [])) + len(d.get("spielen", [])) >= 1
+        ]
+        voice_info = "🎙️ Niemand im Voice — zeige alle Vorschläge."
 
     if not kandidaten:
-        await interaction.response.send_message(
-            "😢 Noch keine Spielvorschlaege mit Interesse — postet Steam-Links in spielvorschlaege!",
+        await interaction.followup.send(
+            "😢 Keine passenden Spielvorschläge gefunden!",
             ephemeral=True
         )
         return
 
-    await interaction.response.defer()
-
-    import asyncio
-    loading_texts = ["🎰 Das Rad dreht sich...", "🎰 Noch laeuft es...", "🎰 Fast...", "🎲 Und das Ergebnis ist..."]
+    loading_texts = ["🎰 Das Rad dreht sich...", "🎰 Noch läuft es...", "🎰 Fast...", "🎲 Und das Ergebnis ist..."]
     msg = await interaction.followup.send(loading_texts[0])
     for text in loading_texts[1:]:
         await asyncio.sleep(1)
@@ -1588,19 +1630,19 @@ async def cmd_random(interaction: discord.Interaction):
     titel   = data.get("title", "Unbekannt")
     url     = data.get("url", "")
     image   = data.get("image", "")
-    hat     = len(data.get("hat", []))
-    spielen = len(data.get("spielen", []))
+    hat     = len(set(data.get("hat",     [])) & anwesende) if anwesende else len(data.get("hat",     []))
+    spielen = len(set(data.get("spielen", [])) & anwesende) if anwesende else len(data.get("spielen", []))
 
     embed = discord.Embed(
         title=f"🎲 Zufallsspiel: {titel}",
         url=url,
-        description=f"**{hat + spielen}** Leute wuerden das spielen!",
+        description=voice_info,
         color=discord.Color.gold()
     )
     if image:
         embed.set_image(url=image)
-    embed.add_field(name="✅ Haben es schon", value=str(hat),     inline=True)
-    embed.add_field(name="👍 Wuerden spielen", value=str(spielen), inline=True)
+    embed.add_field(name="✅ Haben es schon",  value=str(hat),     inline=True)
+    embed.add_field(name="❤️ Wollen spielen",  value=str(spielen), inline=True)
 
     await msg.edit(content="", embed=embed)
 
