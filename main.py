@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
