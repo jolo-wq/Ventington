@@ -352,10 +352,73 @@ async def post_vorschlag(channel, app_id: str, steam_url: str, vorschlagender: d
 
 # ================= ON MESSAGE =================
 
+async def handle_violation_standalone(msg, channel_name="diesem Channel"):
+    uid = str(msg.author.id)
+    now_ts = datetime.now(berlin)
+    entry = state["verwarnungen"].get(uid, {"count": 0, "timestamp": None})
+
+    if entry["timestamp"]:
+        last = datetime.fromisoformat(entry["timestamp"]).astimezone(berlin)
+        if (now_ts - last).total_seconds() > 7 * 24 * 3600:
+            entry = {"count": 0, "timestamp": None}
+
+    entry["count"] += 1
+    entry["timestamp"] = now_ts.isoformat()
+    state["verwarnungen"][uid] = entry
+    save_state()
+
+    count = entry["count"]
+    if count == 1:
+        await msg.channel.send(
+            f"⚠️ {msg.author.mention} Slash-Commands sind in diesem Channel nicht erlaubt!",
+            delete_after=20
+        )
+    elif count == 2:
+        await msg.channel.send(f"🚫 {msg.author.mention} 2. Verstoß — 5 Minuten Timeout!", delete_after=20)
+        try:
+            until = (datetime.now(berlin) + timedelta(minutes=5)).astimezone(pytz.utc).replace(tzinfo=None)
+            await msg.author.timeout(until, reason=f"2. Verstoß in {channel_name}")
+        except Exception:
+            pass
+    elif count == 3:
+        await msg.channel.send(f"🚫 {msg.author.mention} 3. Verstoß — 1 Stunde Timeout!", delete_after=20)
+        try:
+            until = (datetime.now(berlin) + timedelta(hours=1)).astimezone(pytz.utc).replace(tzinfo=None)
+            await msg.author.timeout(until, reason=f"3. Verstoß in {channel_name}")
+        except Exception:
+            pass
+    else:
+        await msg.channel.send(f"🚫 {msg.author.mention} Wiederholter Verstoß — 24 Stunden Timeout!", delete_after=20)
+        try:
+            until = (datetime.now(berlin) + timedelta(hours=24)).astimezone(pytz.utc).replace(tzinfo=None)
+            await msg.author.timeout(until, reason=f"Wiederholter Verstoß in {channel_name}")
+        except Exception:
+            pass
+
+
 @bot.event
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
+    # Slash-Commands in geschuetzten Channels blocken
+    if message.content.startswith("/") and not message.author.bot:
+        if message.channel.id == VORSCHLAG_CHANNEL_ID:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await handle_violation_standalone(message, "spielvorschlaege")
+            await bot.process_commands(message)
+            return
+        if message.channel.id == CODES_CHANNEL_ID and not message.content.startswith("/game"):
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await handle_violation_standalone(message, "codes")
+            await bot.process_commands(message)
+            return
+
     if message.channel.id == VORSCHLAG_CHANNEL_ID:
         match = STEAM_LINK_RE.search(message.content)
         if match:
@@ -371,23 +434,18 @@ async def on_message(message: discord.Message):
                 await message.delete()
             except Exception:
                 pass
-            await message.channel.send(
-                f"⚠️ {message.author.mention} Hier sind nur Steam-Links erlaubt! "
-                f"Einfach den Link aus dem Steam Store einfügen, z.B.: "
-                f"`https://store.steampowered.com/app/945360`",
-                delete_after=20
-            )
+            await handle_violation_standalone(message, "spielvorschlaege")
     if message.channel.id == CODES_CHANNEL_ID:
         # Hilfsfunktion: Verwarnung / Timeout
-        async def handle_violation(msg):
+        async def handle_violation(msg, channel_name="diesem Channel"):
             uid = str(msg.author.id)
             now_ts = datetime.now(berlin)
             entry = state["verwarnungen"].get(uid, {"count": 0, "timestamp": None})
 
-            # Reset nach 24h
+            # Reset nach 7 Tagen
             if entry["timestamp"]:
                 last = datetime.fromisoformat(entry["timestamp"]).astimezone(berlin)
-                if (now_ts - last).total_seconds() > 86400:
+                if (now_ts - last).total_seconds() > 7 * 24 * 3600:
                     entry = {"count": 0, "timestamp": None}
 
             entry["count"] += 1
@@ -400,25 +458,42 @@ async def on_message(message: discord.Message):
             except Exception:
                 pass
 
-            if entry["count"] == 1:
+            count = entry["count"]
+            if count == 1:
                 await msg.channel.send(
-                    f"⚠️ {msg.author.mention} Hier bitte nur Codes, Codenames-Links oder `/server` benutzen!",
+                    f"⚠️ {msg.author.mention} Das gehört nicht in {channel_name}! Bitte nur erlaubte Inhalte posten.",
                     delete_after=20
                 )
-            else:
+            elif count == 2:
                 await msg.channel.send(
-                    f"🚫 {msg.author.mention} Zweiter Verstoß — 5 Minuten Timeout!",
+                    f"🚫 {msg.author.mention} 2. Verstoß — 5 Minuten Timeout!",
                     delete_after=20
                 )
                 try:
-                    until = datetime.now(berlin) + timedelta(minutes=5)
-                    until_utc = until.astimezone(pytz.utc).replace(tzinfo=None)
-                    await msg.author.timeout(until_utc, reason="Wiederholter Verstoß im codes-Channel")
+                    until = (datetime.now(berlin) + timedelta(minutes=5)).astimezone(pytz.utc).replace(tzinfo=None)
+                    await msg.author.timeout(until, reason=f"2. Verstoß in {channel_name}")
                 except Exception:
                     pass
-                entry["count"] = 0
-                state["verwarnungen"][uid] = entry
-                save_state()
+            elif count == 3:
+                await msg.channel.send(
+                    f"🚫 {msg.author.mention} 3. Verstoß — 1 Stunde Timeout!",
+                    delete_after=20
+                )
+                try:
+                    until = (datetime.now(berlin) + timedelta(hours=1)).astimezone(pytz.utc).replace(tzinfo=None)
+                    await msg.author.timeout(until, reason=f"3. Verstoß in {channel_name}")
+                except Exception:
+                    pass
+            else:
+                await msg.channel.send(
+                    f"🚫 {msg.author.mention} Wiederholter Verstoß — 24 Stunden Timeout!",
+                    delete_after=20
+                )
+                try:
+                    until = (datetime.now(berlin) + timedelta(hours=24)).astimezone(pytz.utc).replace(tzinfo=None)
+                    await msg.author.timeout(until, reason=f"Wiederholter Verstoß in {channel_name}")
+                except Exception:
+                    pass
 
         # Ist heute ein Spieltag? (Dienstag=1, Donnerstag=3)
         heute = datetime.now(berlin).weekday()
