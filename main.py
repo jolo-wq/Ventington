@@ -472,8 +472,8 @@ async def on_message(message: discord.Message):
                 try:
                     until = (datetime.now(berlin) + timedelta(minutes=5)).astimezone(pytz.utc).replace(tzinfo=None)
                     await msg.author.timeout(until, reason=f"2. Verstoß in {channel_name}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Timeout Fehler: {e}")
             elif count == 3:
                 await msg.channel.send(
                     f"🚫 {msg.author.mention} 3. Verstoß — 1 Stunde Timeout!",
@@ -482,8 +482,8 @@ async def on_message(message: discord.Message):
                 try:
                     until = (datetime.now(berlin) + timedelta(hours=1)).astimezone(pytz.utc).replace(tzinfo=None)
                     await msg.author.timeout(until, reason=f"3. Verstoß in {channel_name}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Timeout Fehler: {e}")
             else:
                 await msg.channel.send(
                     f"🚫 {msg.author.mention} Wiederholter Verstoß — 24 Stunden Timeout!",
@@ -492,8 +492,8 @@ async def on_message(message: discord.Message):
                 try:
                     until = (datetime.now(berlin) + timedelta(hours=24)).astimezone(pytz.utc).replace(tzinfo=None)
                     await msg.author.timeout(until, reason=f"Wiederholter Verstoß in {channel_name}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Timeout Fehler: {e}")
 
         # Ist heute ein Spieltag? (Dienstag=1, Donnerstag=3)
         heute = datetime.now(berlin).weekday()
