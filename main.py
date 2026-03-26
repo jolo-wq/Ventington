@@ -465,6 +465,19 @@ async def on_message(message: discord.Message):
             except Exception:
                 pass
 
+        # Alle vorherigen Posts im codes-Channel loeschen
+        async def clear_codes_channel():
+            for key in ("last_code_message_id", "last_codenames_message_id", "last_server_message_id"):
+                mid = state.get(key)
+                if mid:
+                    try:
+                        old = await message.channel.fetch_message(mid)
+                        await old.delete()
+                    except Exception:
+                        pass
+                    state[key] = None
+            save_state()
+
         # Ist heute ein Spieltag? (Dienstag=1, Donnerstag=3)
         heute = datetime.now(berlin).weekday()
         ist_spieltag = heute in (1, 3)
@@ -488,15 +501,8 @@ async def on_message(message: discord.Message):
             embed.add_field(name="👤 Gepostet von", value=message.author.mention, inline=True)
             embed.set_footer(text="Dieser Link loescht sich in 3 Stunden automatisch.")
 
+            await clear_codes_channel()
             cn_msg = await message.channel.send(embed=embed)
-
-            old_cn_id = state.get("last_codenames_message_id")
-            if old_cn_id and old_cn_id != cn_msg.id:
-                try:
-                    old_msg = await message.channel.fetch_message(old_cn_id)
-                    await old_msg.delete()
-                except Exception:
-                    pass
 
             state["last_codenames_message_id"] = cn_msg.id
             save_state()
@@ -548,15 +554,8 @@ async def on_message(message: discord.Message):
             embed.set_image(url=spiel_icon)
             embed.set_footer(text="Loescht sich in 3 Stunden automatisch.")
 
+            await clear_codes_channel()
             code_msg = await message.channel.send(embed=embed)
-
-            old_code_id = state.get("last_code_message_id")
-            if old_code_id and old_code_id != code_msg.id:
-                try:
-                    old = await message.channel.fetch_message(old_code_id)
-                    await old.delete()
-                except Exception:
-                    pass
 
             state["last_code_message_id"] = code_msg.id
             save_state()
@@ -1417,14 +1416,17 @@ async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, pa
     embed.add_field(name="👤 Gepostet von", value=interaction.user.mention, inline=True)
     embed.set_footer(text="Loescht sich in 3 Stunden automatisch.")
 
-    # Alten Server-Post loeschen
-    old_srv_id = state.get("last_server_message_id")
-    if old_srv_id:
-        try:
-            old_msg = await interaction.channel.fetch_message(old_srv_id)
-            await old_msg.delete()
-        except Exception:
-            pass
+    # Alle vorherigen codes-Posts loeschen
+    for key in ("last_code_message_id", "last_codenames_message_id", "last_server_message_id"):
+        mid = state.get(key)
+        if mid:
+            try:
+                old_msg = await interaction.channel.fetch_message(mid)
+                await old_msg.delete()
+            except Exception:
+                pass
+            state[key] = None
+    save_state()
 
     msg = await interaction.channel.send(embed=embed)
     state["last_server_message_id"] = msg.id
