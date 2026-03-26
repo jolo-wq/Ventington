@@ -167,7 +167,7 @@ def make_vorschlag_view(app_id: str) -> discord.ui.View:
 
         def remove_user(self, uid):
             d = self.get_data()
-            for key in ("hat", "spielen", "kaufen", "nein"):
+            for key in ("hat", "spielen", "nein"):
                 lst = d.get(key, [])
                 if uid in lst:
                     lst.remove(uid)
@@ -185,36 +185,29 @@ def make_vorschlag_view(app_id: str) -> discord.ui.View:
             d       = self.get_data()
             hat     = d.get("hat",     [])
             spielen = d.get("spielen", [])
-            kaufen  = d.get("kaufen",  [])
             nein    = d.get("nein",    [])
 
             def mentions(lst):
                 return "\n".join(f"<@{u}>" for u in lst) or "-"
 
             embed = interaction.message.embeds[0]
-            embed.set_field_at(0, name=f"✅ Hab ich schon ({len(hat)})",     value=mentions(hat),     inline=True)
-            embed.set_field_at(1, name=f"👍 Würde spielen ({len(spielen)})", value=mentions(spielen), inline=True)
-            embed.set_field_at(2, name=f"💰 Würde kaufen ({len(kaufen)})",   value=mentions(kaufen),  inline=True)
-            embed.set_field_at(3, name=f"❌ Kein Interesse ({len(nein)})",   value=mentions(nein),    inline=True)
+            embed.set_field_at(0, name=f"👍 Hab ich schon ({len(hat)})",     value=mentions(hat),     inline=True)
+            embed.set_field_at(1, name=f"❤️ Würde spielen ({len(spielen)})", value=mentions(spielen), inline=True)
+            embed.set_field_at(2, name=f"👎 Kein Interesse ({len(nein)})",   value=mentions(nein),    inline=True)
 
             await interaction.response.edit_message(embed=embed, view=self)
 
-        @discord.ui.button(label="Hab ich schon",  style=discord.ButtonStyle.green,   emoji="✅", custom_id=f"vsg_{app_id}_hat")
+        @discord.ui.button(label="Hab ich schon",  style=discord.ButtonStyle.gray,    emoji="👍", custom_id=f"vsg_{app_id}_hat")
         async def btn_hat(self, interaction, button):
             self.add_vote(interaction.user.id, "hat")
             await self.refresh_embed(interaction)
 
-        @discord.ui.button(label="Würde spielen",  style=discord.ButtonStyle.blurple, emoji="👍", custom_id=f"vsg_{app_id}_spielen")
+        @discord.ui.button(label="Will spielen!",  style=discord.ButtonStyle.green,   emoji="❤️", custom_id=f"vsg_{app_id}_spielen")
         async def btn_spielen(self, interaction, button):
             self.add_vote(interaction.user.id, "spielen")
             await self.refresh_embed(interaction)
 
-        @discord.ui.button(label="Würde kaufen",   style=discord.ButtonStyle.gray,    emoji="💰", custom_id=f"vsg_{app_id}_kaufen")
-        async def btn_kaufen(self, interaction, button):
-            self.add_vote(interaction.user.id, "kaufen")
-            await self.refresh_embed(interaction)
-
-        @discord.ui.button(label="Kein Interesse", style=discord.ButtonStyle.red,     emoji="❌", custom_id=f"vsg_{app_id}_nein")
+        @discord.ui.button(label="Kein Interesse", style=discord.ButtonStyle.red,     emoji="👎", custom_id=f"vsg_{app_id}_nein")
         async def btn_nein(self, interaction, button):
             self.add_vote(interaction.user.id, "nein")
             await self.refresh_embed(interaction)
@@ -266,10 +259,9 @@ async def post_vorschlag(channel, app_id: str, steam_url: str, vorschlagender: d
     if image:
         embed.set_image(url=image)
 
-    embed.add_field(name="✅ Hab ich schon (0)",  value="-", inline=True)
-    embed.add_field(name="👍 Würde spielen (0)",  value="-", inline=True)
-    embed.add_field(name="💰 Würde kaufen (0)",   value="-", inline=True)
-    embed.add_field(name="❌ Kein Interesse (0)", value="-", inline=True)
+    embed.add_field(name="👍 Hab ich schon (0)",  value="-", inline=True)
+    embed.add_field(name="❤️ Würde spielen (0)",  value="-", inline=True)
+    embed.add_field(name="👎 Kein Interesse (0)", value="-", inline=True)
 
     view = make_vorschlag_view(app_id)
     msg  = await channel.send(embed=embed, view=view)
@@ -294,6 +286,10 @@ async def on_message(message: discord.Message):
             app_id    = match.group(1)
             steam_url = f"https://store.steampowered.com/app/{app_id}"
             await post_vorschlag(message.channel, app_id, steam_url, message.author)
+            try:
+                await message.delete()
+            except Exception:
+                pass
     await bot.process_commands(message)
 
 
