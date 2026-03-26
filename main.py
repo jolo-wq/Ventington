@@ -543,6 +543,70 @@ async def on_message(message: discord.Message):
                     save_state()
 
             bot.loop.create_task(delete_codenames_later(cn_msg))
+            return
+
+        # Lobby-Code (6 Grossbuchstaben)?
+        code = message.content.strip().upper()
+        if CODE_RE.match(code):
+            if not ist_spieltag:
+                await handle_violation(message, "codes")
+                return
+            try:
+                await message.delete()
+            except Exception:
+                pass
+
+            spiel = get_tuesday_game()
+            if "Among Us" in spiel:
+                farbe       = discord.Color.red()
+                spiel_name  = "🛸 Among Us"
+                server_info = "Server: **Modded EU**"
+                spiel_icon  = "https://cdn.cloudflare.steamstatic.com/steam/apps/945360/header.jpg"
+            else:
+                farbe       = discord.Color.yellow()
+                spiel_name  = "🦆 Goose Goose Duck"
+                server_info = "Server: **EU**"
+                spiel_icon  = "https://cdn.cloudflare.steamstatic.com/steam/apps/1568590/header.jpg"
+
+            embed = discord.Embed(
+                title=f"{spiel_name} — Lobby Code",
+                description=f"```{code}```",
+                color=farbe
+            )
+            embed.add_field(name="📡 Server", value=server_info, inline=True)
+            embed.add_field(name="👤 Gepostet von", value=message.author.mention, inline=True)
+            embed.set_image(url=spiel_icon)
+            embed.set_footer(text="Loescht sich in 3 Stunden automatisch.")
+
+            code_msg = await message.channel.send(embed=embed)
+
+            old_code_id = state.get("last_code_message_id")
+            if old_code_id and old_code_id != code_msg.id:
+                try:
+                    old = await message.channel.fetch_message(old_code_id)
+                    await old.delete()
+                except Exception:
+                    pass
+
+            state["last_code_message_id"] = code_msg.id
+            save_state()
+
+            import asyncio as _asyncio
+            async def delete_code_later(m):
+                await _asyncio.sleep(3 * 60 * 60)
+                try:
+                    await m.delete()
+                except Exception:
+                    pass
+                if state.get("last_code_message_id") == m.id:
+                    state["last_code_message_id"] = None
+                    save_state()
+
+            bot.loop.create_task(delete_code_later(code_msg))
+            return
+
+        # Alles andere -> Verwarnung
+        await handle_violation(message, "codes")
 
     # Ventington Chat Channel
     if message.channel.id == VENTINGTON_CHAT_ID:
