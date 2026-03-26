@@ -367,33 +367,25 @@ async def handle_violation_standalone(msg, channel_name="diesem Channel"):
     state["verwarnungen"][uid] = entry
     save_state()
 
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
     count = entry["count"]
     if count == 1:
-        await msg.channel.send(
-            f"⚠️ {msg.author.mention} Slash-Commands sind in diesem Channel nicht erlaubt!",
-            delete_after=20
-        )
+        hinweis = f"⚠️ Slash-Commands sind in **#{channel_name}** nicht erlaubt!"
     elif count == 2:
-        await msg.channel.send(f"🚫 {msg.author.mention} 2. Verstoß — 5 Minuten Timeout!", delete_after=20)
-        try:
-            until = (datetime.now(berlin) + timedelta(minutes=5)).astimezone(pytz.utc).replace(tzinfo=None)
-            await msg.author.timeout(until, reason=f"2. Verstoß in {channel_name}")
-        except Exception:
-            pass
+        hinweis = f"⚠️ 2. Verstoß in **#{channel_name}**! Bitte halte dich an die Kanalregeln."
     elif count == 3:
-        await msg.channel.send(f"🚫 {msg.author.mention} 3. Verstoß — 1 Stunde Timeout!", delete_after=20)
-        try:
-            until = (datetime.now(berlin) + timedelta(hours=1)).astimezone(pytz.utc).replace(tzinfo=None)
-            await msg.author.timeout(until, reason=f"3. Verstoß in {channel_name}")
-        except Exception:
-            pass
+        hinweis = f"🚫 3. Verstoß in **#{channel_name}**! Das ist deine letzte Warnung."
     else:
-        await msg.channel.send(f"🚫 {msg.author.mention} Wiederholter Verstoß — 24 Stunden Timeout!", delete_after=20)
-        try:
-            until = (datetime.now(berlin) + timedelta(hours=24)).astimezone(pytz.utc).replace(tzinfo=None)
-            await msg.author.timeout(until, reason=f"Wiederholter Verstoß in {channel_name}")
-        except Exception:
-            pass
+        hinweis = f"🚫 Wiederholter Verstoß in **#{channel_name}**! Ein Admin wurde informiert."
+
+    try:
+        await msg.author.send(hinweis)
+    except Exception:
+        pass
 
 
 @bot.event
@@ -460,40 +452,18 @@ async def on_message(message: discord.Message):
 
             count = entry["count"]
             if count == 1:
-                await msg.channel.send(
-                    f"⚠️ {msg.author.mention} Das gehört nicht in {channel_name}! Bitte nur erlaubte Inhalte posten.",
-                    delete_after=20
-                )
+                hinweis = "⚠️ Hier sind nur erlaubte Inhalte gestattet! Bitte lies den Kanal-Disclaimer."
             elif count == 2:
-                await msg.channel.send(
-                    f"🚫 {msg.author.mention} 2. Verstoß — 5 Minuten Timeout!",
-                    delete_after=20
-                )
-                try:
-                    until = (datetime.now(berlin) + timedelta(minutes=5)).astimezone(pytz.utc).replace(tzinfo=None)
-                    await msg.author.timeout(until, reason=f"2. Verstoß in {channel_name}")
-                except Exception as e:
-                    print(f"Timeout Fehler: {e}")
+                hinweis = "⚠️ 2. Verstoß! Bitte halte dich an die Kanalregeln."
             elif count == 3:
-                await msg.channel.send(
-                    f"🚫 {msg.author.mention} 3. Verstoß — 1 Stunde Timeout!",
-                    delete_after=20
-                )
-                try:
-                    until = (datetime.now(berlin) + timedelta(hours=1)).astimezone(pytz.utc).replace(tzinfo=None)
-                    await msg.author.timeout(until, reason=f"3. Verstoß in {channel_name}")
-                except Exception as e:
-                    print(f"Timeout Fehler: {e}")
+                hinweis = "🚫 3. Verstoß! Das ist deine letzte Warnung."
             else:
-                await msg.channel.send(
-                    f"🚫 {msg.author.mention} Wiederholter Verstoß — 24 Stunden Timeout!",
-                    delete_after=20
-                )
-                try:
-                    until = (datetime.now(berlin) + timedelta(hours=24)).astimezone(pytz.utc).replace(tzinfo=None)
-                    await msg.author.timeout(until, reason=f"Wiederholter Verstoß in {channel_name}")
-                except Exception as e:
-                    print(f"Timeout Fehler: {e}")
+                hinweis = "🚫 Wiederholter Verstoß! Ein Admin wurde informiert."
+
+            try:
+                await msg.author.send(f"**{channel_name}:** {hinweis}")
+            except Exception:
+                pass
 
         # Ist heute ein Spieltag? (Dienstag=1, Donnerstag=3)
         heute = datetime.now(berlin).weekday()
