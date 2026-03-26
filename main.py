@@ -19,7 +19,7 @@ HIGHSCORE_CHANNEL_ID = 1484576122917228564  # 🏆highscores
 ARCHIV_CHANNEL_ID    = 1484937530297155715  # 🗄️archiv
 QUACK_CHANNEL_ID     = 802676292318527499   # 💬quack-ecke
 MITSPIELEN_CHANNEL_ID = 919537942026944522  # 🎮mitspielen
-EINTRITT_CHANNEL_ID  = 802618368804782083   # 🤗eintritt
+EINTRITT_CHANNEL_ID  = 1486773005412732959  # 🤗eintritt (neu)
 CODES_CHANNEL_ID     = 802693019576172554   # 📟codes
 NEWS_CHANNEL_ID      = 1486757129338617956  # 📰news
 GUILD_ID             = 802618368804782080
@@ -1271,12 +1271,12 @@ async def cmd_commands(interaction: discord.Interaction):
     )
     embed.add_field(
         name="🖥️ Server-Info",
-        value="`/regeln` \u2014 Server- & Spielregeln\n`/modded` \u2014 Among Us Mod-Link\n`/game` \u2014 Spielserver posten\n`/commands` \u2014 Diese Uebersicht",
+        value="`/regeln` \u2014 Server- & Spielregeln\n`/modded` \u2014 Among Us Mod-Link\n`/commands` \u2014 Diese Uebersicht",
         inline=False
     )
     embed.add_field(
         name="⚠️ Nur in bestimmten Channels",
-        value="`/random` `/kalender` \u2192 quack-ecke & mitspielen\n`/regeln` `/modded` \u2192 quack-ecke\n`/game` \u2192 codes",
+        value="`/random` `/kalender` \u2192 quack-ecke & mitspielen\n`/regeln` `/modded` \u2192 quack-ecke",
         inline=False
     )
     embed.set_footer(text="Loescht sich in 60 Sekunden automatisch.")
