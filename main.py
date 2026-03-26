@@ -844,8 +844,8 @@ async def post_poll(channel, text, event_dt, day: str = None, spiel: str = None)
     if day and current_view:
         yes_uids = current_view.yes
 
-        # Archiv-Eintrag
-        if event_time:
+        # Archiv-Eintrag nur wenn jemand dabei war
+        if event_time and yes_uids:
             await post_archiv_entry(day, event_time, yes_uids, spiel)
 
         # Highscore + Streaks
