@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()
-import discord
+load_dotenv()import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import pytz
@@ -77,6 +76,7 @@ if "reminder_msg_ids" not in state: state["reminder_msg_ids"] = []
 if "last_code_message_id" not in state: state["last_code_message_id"] = None
 if "last_codenames_message_id" not in state: state["last_codenames_message_id"] = None
 if "last_server_message_id" not in state: state["last_server_message_id"] = None
+if "verwarnungen" not in state: state["verwarnungen"] = {}  # uid -> {"count": int, "timestamp": str}
 if "archiv"         not in state: state["archiv"]         = []
 if "monatsbericht_msg_id" not in state: state["monatsbericht_msg_id"] = None
 
@@ -311,6 +311,52 @@ async def on_message(message: discord.Message):
                 delete_after=20
             )
     if message.channel.id == CODES_CHANNEL_ID:
+        # Hilfsfunktion: Verwarnung / Timeout
+        async def handle_violation(msg):
+            uid = str(msg.author.id)
+            now_ts = datetime.now(berlin)
+            entry = state["verwarnungen"].get(uid, {"count": 0, "timestamp": None})
+
+            # Reset nach 24h
+            if entry["timestamp"]:
+                last = datetime.fromisoformat(entry["timestamp"]).astimezone(berlin)
+                if (now_ts - last).total_seconds() > 86400:
+                    entry = {"count": 0, "timestamp": None}
+
+            entry["count"] += 1
+            entry["timestamp"] = now_ts.isoformat()
+            state["verwarnungen"][uid] = entry
+            save_state()
+
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+
+            if entry["count"] == 1:
+                await msg.channel.send(
+                    f"⚠️ {msg.author.mention} Hier bitte nur Codes, Codenames-Links oder `/server` benutzen!",
+                    delete_after=20
+                )
+            else:
+                await msg.channel.send(
+                    f"🚫 {msg.author.mention} Zweiter Verstoß — 5 Minuten Timeout!",
+                    delete_after=20
+                )
+                try:
+                    until = datetime.now(berlin) + timedelta(minutes=5)
+                    until_utc = until.astimezone(pytz.utc).replace(tzinfo=None)
+                    await msg.author.timeout(until_utc, reason="Wiederholter Verstoß im codes-Channel")
+                except Exception:
+                    pass
+                entry["count"] = 0
+                state["verwarnungen"][uid] = entry
+                save_state()
+
+        # Ist heute ein Spieltag? (Dienstag=1, Donnerstag=3)
+        heute = datetime.now(berlin).weekday()
+        ist_spieltag = heute in (1, 3)
+
         # Codenames Link?
         cn_match = CODENAMES_LINK_RE.search(message.content)
         if cn_match:
@@ -1221,12 +1267,13 @@ async def cmd_commands(interaction: discord.Interaction):
 
 # ================= SERVER COMMAND =================
 
-@bot.tree.command(name="server", description="Postet einen Spielserver im codes-Channel")
+@bot.tree.command(name="game", description="Postet einen Spielserver im codes-Channel")
 @discord.app_commands.describe(
     spiel="Welches Spiel? (z.B. Witch It, Minecraft...)",
-    server="IP, Servername oder Link zum Kopieren"
+    server="IP, Servername oder Link zum Kopieren",
+    passwort="Passwort fuer den Server (optional)"
 )
-async def cmd_server(interaction: discord.Interaction, spiel: str, server: str):
+async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, passwort: str = None):
     if interaction.channel_id != CODES_CHANNEL_ID:
         await interaction.response.send_message(
             "Dieser Befehl ist nur im codes-Channel erlaubt!",
@@ -1241,13 +1288,22 @@ async def cmd_server(interaction: discord.Interaction, spiel: str, server: str):
         )
         return
 
+    if passwort and len(passwort) > 50:
+        await interaction.response.send_message(
+            "Das Passwort ist zu lang! Maximal 50 Zeichen.",
+            ephemeral=True
+        )
+        return
+
     await interaction.response.defer(ephemeral=True)
 
     embed = discord.Embed(
         title=f"🎮 Spielserver: {spiel}",
         color=discord.Color.teal()
     )
-    embed.add_field(name="🖥️ Server / IP zum Kopieren", value=f"`{server}`", inline=False)
+    embed.add_field(name="🖥️ Server / IP", value=f"`{server}`", inline=False)
+    if passwort:
+        embed.add_field(name="🔑 Passwort", value=f"`{passwort}`", inline=False)
     embed.add_field(name="👤 Gepostet von", value=interaction.user.mention, inline=True)
     embed.set_footer(text="Loescht sich in 3 Stunden automatisch.")
 
