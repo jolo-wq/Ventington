@@ -468,41 +468,6 @@ async def on_message(message: discord.Message):
                     save_state()
 
             bot.loop.create_task(delete_codenames_later(cn_msg))
-            # Ventington Chat
-    if message.channel.id == VENTINGTON_CHAT_ID:
-        if gemini_client is None:
-            await message.channel.send("*räusper* Es scheint als hätte jemand vergessen meinen Gemini-Schlüssel einzustecken. Wie unzivilisiert.* 🎩", delete_after=10)
-        else:
-            async with message.channel.typing():
-                uid = message.author.id
-                if uid not in chat_sessions:
-                    chat_sessions[uid] = []
-
-                # Verlauf aufbauen (max 10 Nachrichten)
-                verlauf = chat_sessions[uid][-10:]
-                verlauf.append({"role": "user", "parts": [message.content]})
-
-                try:
-                    # System prompt + Verlauf
-                    prompt = VENTINGTON_SYSTEM_PROMPT + "\n\nGespräch:\n"
-                    for eintrag in verlauf:
-                        rolle = "Nutzer" if eintrag["role"] == "user" else "Ventington"
-                        prompt += f"{rolle}: {eintrag['parts'][0]}\n"
-                    prompt += "Ventington:"
-
-                    antwort = gemini_model.generate_content(prompt)
-                    antwort_text = antwort.text.strip()
-
-                    verlauf.append({"role": "model", "parts": [antwort_text]})
-                    chat_sessions[uid] = verlauf
-
-                    # Lange Antworten aufteilen
-                    if len(antwort_text) > 2000:
-                        antwort_text = antwort_text[:1997] + "..."
-
-                    await message.reply(antwort_text)
-                except Exception as e:
-                    await message.reply("*seufz* Es tut mir leid, mein Geist scheint heute etwas abwesend zu sein. Versuchen Sie es später erneut. 🎩")
 
     # Ventington Chat Channel
     if message.channel.id == VENTINGTON_CHAT_ID:
