@@ -193,20 +193,20 @@ def make_vorschlag_view(app_id: str) -> discord.ui.View:
                 return "\n".join(f"<@{u}>" for u in lst) or "-"
 
             embed = interaction.message.embeds[0]
-            embed.set_field_at(0, name=f"👍 Hab ich schon ({len(hat)})",     value=mentions(hat),     inline=True)
-            embed.set_field_at(1, name=f"❤️ Würde spielen ({len(spielen)})", value=mentions(spielen), inline=True)
+            embed.set_field_at(0, name=f"❤️ Will spielen! ({len(spielen)})", value=mentions(spielen), inline=True)
+            embed.set_field_at(1, name=f"👍 Hab ich schon ({len(hat)})",     value=mentions(hat),     inline=True)
             embed.set_field_at(2, name=f"👎 Kein Interesse ({len(nein)})",   value=mentions(nein),    inline=True)
 
             await interaction.response.edit_message(embed=embed, view=self)
 
-        @discord.ui.button(label="Hab ich schon",  style=discord.ButtonStyle.gray,    emoji="👍", custom_id=f"vsg_{app_id}_hat")
-        async def btn_hat(self, interaction, button):
-            self.add_vote(interaction.user.id, "hat")
-            await self.refresh_embed(interaction)
-
         @discord.ui.button(label="Will spielen!",  style=discord.ButtonStyle.green,   emoji="❤️", custom_id=f"vsg_{app_id}_spielen")
         async def btn_spielen(self, interaction, button):
             self.add_vote(interaction.user.id, "spielen")
+            await self.refresh_embed(interaction)
+
+        @discord.ui.button(label="Hab ich schon",  style=discord.ButtonStyle.gray,    emoji="👍", custom_id=f"vsg_{app_id}_hat")
+        async def btn_hat(self, interaction, button):
+            self.add_vote(interaction.user.id, "hat")
             await self.refresh_embed(interaction)
 
         @discord.ui.button(label="Kein Interesse", style=discord.ButtonStyle.red,     emoji="👎", custom_id=f"vsg_{app_id}_nein")
@@ -261,8 +261,8 @@ async def post_vorschlag(channel, app_id: str, steam_url: str, vorschlagender: d
     if image:
         embed.set_image(url=image)
 
+    embed.add_field(name="❤️ Will spielen! (0)", value="-", inline=True)
     embed.add_field(name="👍 Hab ich schon (0)",  value="-", inline=True)
-    embed.add_field(name="❤️ Würde spielen (0)",  value="-", inline=True)
     embed.add_field(name="👎 Kein Interesse (0)", value="-", inline=True)
 
     view = make_vorschlag_view(app_id)
@@ -271,7 +271,7 @@ async def post_vorschlag(channel, app_id: str, steam_url: str, vorschlagender: d
     state["vorschlaege"][app_id] = {
         "title": name, "url": steam_url, "image": image or "",
         "message_id": msg.id,
-        "hat": [], "spielen": [], "kaufen": [], "nein": [],
+        "hat": [], "spielen": [], "nein": [],
     }
     save_state()
 
