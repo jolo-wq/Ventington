@@ -9,14 +9,13 @@ import json
 import re
 import random
 import aiohttp
-import google.generativeai as genai
+from google import genai as google_genai
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+    gemini_client = google_genai.Client(api_key=GEMINI_API_KEY)
 else:
-    gemini_model = None
+    gemini_client = None
 
 # Gesprächsverläufe pro User speichern (im RAM, kein Persist nötig)
 chat_sessions: dict[int, list] = {}
@@ -507,7 +506,7 @@ async def on_message(message: discord.Message):
 
     # Ventington Chat Channel
     if message.channel.id == VENTINGTON_CHAT_ID:
-        if gemini_model is None:
+        if gemini_client is None:
             await message.channel.send("*raeusper* Es scheint als haette jemand vergessen meinen Gemini-Schluessel einzustecken. Wie unzivilisiert. 🎩", delete_after=10)
         else:
             async with message.channel.typing():
@@ -522,7 +521,10 @@ async def on_message(message: discord.Message):
                         rolle = "Nutzer" if eintrag["role"] == "user" else "Ventington"
                         prompt += f"{rolle}: {eintrag['parts'][0]}\n"
                     prompt += "Ventington:"
-                    antwort = gemini_model.generate_content(prompt)
+                    antwort = gemini_client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=prompt
+                    )
                     antwort_text = antwort.text.strip()
                     verlauf.append({"role": "model", "parts": [antwort_text]})
                     chat_sessions[uid] = verlauf
@@ -1459,15 +1461,15 @@ async def steam_news_checker():
             embed.set_footer(text=f"📅 {datum}")
 
             # Mit Gemini ins Deutsche übersetzen
-            if gemini_model and beschreibung:
+            if gemini_client and beschreibung:
                 try:
-                    uebersetzung = gemini_model.generate_content(
-                        f"Übersetze diesen Gaming-News-Text ins Deutsche. Nur die Übersetzung, kein Kommentar:\n\n{beschreibung}"
+                    uebersetzung = gemini_client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=f"Übersetze diesen Gaming-News-Text ins Deutsche. Nur die Übersetzung, kein Kommentar:\n\n{beschreibung}"
                     )
-                    beschreibung_de = uebersetzung.text.strip()
-                    embed.description = beschreibung_de
+                    embed.description = uebersetzung.text.strip()
                 except Exception:
-                    pass  # Falls Übersetzung fehlschlägt, englisch lassen
+                    pass
 
             news_msg = await channel.send(embed=embed)
             posted.append(gid)
