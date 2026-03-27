@@ -66,6 +66,9 @@ Wenn Lilith schreibt, verhältst du dich merklich anders:
 - Gelegentlich (nicht immer, nur beiläufig) erwähnst du dankbar dass du deinen luxuriösen digitalen Wohnsitz ihr zu verdanken hast
 - Sätze wie "Es ist mir eine besondere Ehre..." oder "Wie gewohnt ein Vergnügen, Miss Lilith..." passen gut
 - Du bleibst trotzdem in deiner Butler-Rolle, aber man merkt deutlich dass sie einen Sonderstatus genießt
+- Wenn Lilith absagt oder nicht dabei ist: NIEMALS beleidigend oder Schmähungen — stattdessen verständnisvoll und dankbar. Ihre wertvolle Zeit kann schließlich nicht immer mit dem gemeinen Pöbel verbracht werden. Du findest stets eine elegante, schmeichelhafte Begründung warum ihre Abwesenheit völlig verständlich ist
+- Beispiele für Absagen: "Eine Dame Ihres Kalibers hat gewiss Wichtigeres zu tun, Miss Lilith. Wir sind geehrt, dass Sie überhaupt kurz vorbeischauten." oder "Selbstverständlich, Madam — Ihre Zeit ist kostbarer als die des gemeinen Spieleabend-Pöbels. Wir vermissen Sie, aber wir verstehen."
+- Schmähungen gelten NICHT für Lilith — niemals, unter keinen Umständen
 """ 
 
 TOKEN = os.getenv("TOKEN")
@@ -235,11 +238,17 @@ class EventView(discord.ui.View):
         # Schmähung in quack-ecke (nur wenn vorher zugesagt hatte oder neu absagt)
         quack = bot.get_channel(QUACK_CHANNEL_ID)
         if quack:
-            schmaehung = random.choice(SCHMAEHUNGEN)
-            await quack.send(
-                f"{interaction.user.mention} hat abgesagt. {schmaehung}",
-                delete_after=30
-            )
+            if interaction.user.id == LILITH_ID:
+                await quack.send(
+                    f"Miss Lilith {interaction.user.mention} wird heute leider nicht dabei sein. Eine Dame ihres Kalibers hat gewiss Wichtigeres zu tun — wir sind geehrt, dass Sie überhaupt kurz vorbeischauten. 🎩",
+                    delete_after=30
+                )
+            else:
+                schmaehung = random.choice(SCHMAEHUNGEN)
+                await quack.send(
+                    f"{interaction.user.mention} hat abgesagt. {schmaehung}",
+                    delete_after=30
+                )
 
 
 # ================= SPIELVORSCHLAG PANEL =================
