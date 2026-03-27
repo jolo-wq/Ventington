@@ -717,9 +717,9 @@ async def on_message(message: discord.Message):
                     chat_sessions[uid] = verlauf
                     if len(antwort_text) > 2000:
                         antwort_text = antwort_text[:1997] + "..."
-                    await message.reply(antwort_text)
+                    await message.channel.send(f"{message.author.mention} {antwort_text}")
                 except Exception:
-                    await message.reply("*seufz* Mein Geist scheint heute abwesend zu sein. Versuchen Sie es spaeter erneut. 🎩")
+                    await message.channel.send(f"{message.author.mention} *seufz* Mein Geist scheint heute abwesend zu sein. Versuchen Sie es spaeter erneut. 🎩")
 
     await bot.process_commands(message)
 
