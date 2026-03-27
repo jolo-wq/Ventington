@@ -743,6 +743,7 @@ async def on_message(message: discord.Message):
                         antwort_text = antwort_text[:1997] + "..."
                     await message.channel.send(f"{message.author.mention} {antwort_text}")
                 except Exception as e:
+                    print(f"GEMINI FEHLER: {e}")
                     err_str = str(e).lower()
                     if "per_minute" in err_str or "rpm" in err_str or "rate" in err_str:
                         hinweis = "Meine kurzfristigen Kapazitäten sind erschöpft. In etwa **1 Minute** bin ich wieder ansprechbar. 🎩"
