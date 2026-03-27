@@ -742,15 +742,8 @@ async def on_message(message: discord.Message):
                     if len(antwort_text) > 2000:
                         antwort_text = antwort_text[:1997] + "..."
                     await message.channel.send(f"{message.author.mention} {antwort_text}")
-                except Exception as e:
-                    print(f"GEMINI FEHLER: {e}")
-                    err_str = str(e).lower()
-                    if "perminute" in err_str or "per_minute" in err_str or "rpm" in err_str or "requests_per_minute" in err_str or "minute" in err_str:
-                        hinweis = "Meine kurzfristigen Kapazitäten sind erschöpft. In etwa **1 Minute** bin ich wieder ansprechbar. 🎩"
-                    else:
-                        reset_zeit = (datetime.now(berlin).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime("%d.%m.%Y um 00:00 Uhr")
-                        hinweis = f"Meine täglichen Kapazitäten sind erschöpft. Ich erneuere mich am **{reset_zeit}**. Bis dahin bitte ich um Geduld. 🎩"
-                    await message.channel.send(f"{message.author.mention} *seufz* Mein Geist scheint heute abwesend zu sein. {hinweis}")
+                except Exception:
+                    await message.channel.send(f"{message.author.mention} *seufz* Geist zu voll — versuch es in 5 Minuten nochmal. 🎩")
 
     await bot.process_commands(message)
 
