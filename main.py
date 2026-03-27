@@ -1,6 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()
-import discord
+load_dotenv()import discord
 from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import pytz
@@ -55,6 +54,16 @@ MEINE BEFEHLE:
 /modded — Link zur Among Us Mod (nur quack-ecke)
 /profile — Deine persönlichen Stats
 /commands — Alle Befehle
+
+SPIELVORSCHLÄGE:
+Wenn jemand nach Spielempfehlungen fragt, hast du Zugriff auf die aktuellen Spielvorschläge des Servers.
+Diese werden dir im Prompt übergeben. Nutze sie um gezielt zu empfehlen welches Spiel für die genannten Personen am besten passt.
+Berücksichtige wer ✅ (hat es), ❤️ (will spielen) oder 👎 (kein Interesse) geklickt hat.
+
+WETTER:
+Wenn jemand nach dem Wetter fragt, frage nach dem Ort. Sobald du einen Ort hast, antworte mit [WETTER:Stadtname] damit das System die Vorhersage holen kann.
+Beispiel: Jemand fragt nach Wetter → du fragst nach Ort → sie sagen "Berlin" → du antwortest "[WETTER:Berlin] *seufz* Wenn Sie darauf bestehen..."
+Präsentiere das Wetter dann bockig-butlerartig als wäre es eine lästige Pflicht.
 
 Antworte immer auf Deutsch, bleib in deiner Butler-Rolle und sei hilfreich aber mit Stil.
 
@@ -240,7 +249,7 @@ class EventView(discord.ui.View):
         if quack:
             if interaction.user.id == LILITH_ID:
                 await quack.send(
-                    f"Miss Lilith {interaction.user.mention} wird heute leider nicht dabei sein. Eine Dame ihres Kalibers hat gewiss Wichtigeres zu tun — wir sind geehrt, dass Sie überhaupt kurz vorbeischauten. 🎩",
+                    f"Miss Lilith wird heute leider nicht dabei sein. Eine Dame ihres Kalibers hat gewiss Wichtigeres zu tun — wir sind geehrt, dass Sie überhaupt kurz vorbeischauten. 🎩",
                     delete_after=30
                 )
             else:
@@ -369,6 +378,63 @@ async def post_vorschlag(channel, app_id: str, steam_url: str, vorschlagender: d
         "hat": [], "spielen": [], "nein": [],
     }
     save_state()
+
+
+# ================= WETTER =================
+
+async def get_wetter(stadt: str) -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Geocoding
+            geo_url = f"https://geocoding-api.open-meteo.com/v1/search?name={stadt}&count=1&language=de"
+            async with session.get(geo_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                geo_data = await resp.json()
+                results = geo_data.get("results", [])
+                if not results:
+                    return f"*seufz* '{stadt}' scheint nicht auf meiner Landkarte zu existieren. Wie ungewoehnlich."
+                loc = results[0]
+                lat, lon = loc["latitude"], loc["longitude"]
+                name = loc.get("name", stadt)
+                land = loc.get("country", "")
+
+            # Wetter holen
+            wetter_url = (
+                f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+                f"&current=temperature_2m,weathercode,windspeed_10m,precipitation"
+                f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum"
+                f"&timezone=Europe/Berlin&forecast_days=3&language=de"
+            )
+            async with session.get(wetter_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                w = await resp.json()
+                curr = w.get("current", {})
+                daily = w.get("daily", {})
+
+                temp     = curr.get("temperature_2m", "?")
+                wind     = curr.get("windspeed_10m", "?")
+                regen    = curr.get("precipitation", 0)
+                code     = curr.get("weathercode", 0)
+
+                # Wettercode zu Text
+                if code == 0:    wetter_desc = "Sonnig ☀️"
+                elif code <= 3:  wetter_desc = "Leicht bewölkt 🌤️"
+                elif code <= 48: wetter_desc = "Bewölkt ☁️"
+                elif code <= 67: wetter_desc = "Regen 🌧️"
+                elif code <= 77: wetter_desc = "Schnee ❄️"
+                elif code <= 82: wetter_desc = "Schauer 🌦️"
+                else:            wetter_desc = "Gewitter ⛈️"
+
+                t_max = daily.get("temperature_2m_max", [None])[0]
+                t_min = daily.get("temperature_2m_min", [None])[0]
+                regen_tag = daily.get("precipitation_sum", [0])[0]
+
+                return (
+                    f"\n🌍 **{name}, {land}** — Aktuell: {wetter_desc}\n"
+                    f"🌡️ {temp}°C (Min: {t_min}°C / Max: {t_max}°C)\n"
+                    f"💨 Wind: {wind} km/h | 🌧️ Niederschlag: {regen} mm\n"
+                    f"📅 Heute gesamt: {regen_tag} mm Niederschlag"
+                )
+    except Exception as e:
+        return f"*räusper* Die Wetterdaten verweigern mir heute ihre Kooperation. Wie unhöflich."
 
 
 # ================= ON MESSAGE =================
@@ -613,7 +679,19 @@ async def on_message(message: discord.Message):
                     heute = datetime.now(berlin).strftime("%A, %d.%m.%Y %H:%M Uhr")
                     ist_lilith = message.author.id == LILITH_ID
                     lilith_hinweis = "\n\nACHTUNG: Die aktuelle Nachricht kommt von LILITH — deiner Herrin und Wohltäterin. Verhalte dich entsprechend ehrerbietig und verehrungsvoll.\n" if ist_lilith else ""
-                    prompt = VENTINGTON_SYSTEM_PROMPT + lilith_hinweis + f"\n\nHeutiges Datum und Uhrzeit: {heute}\n\nGespraech:\n"
+
+                    # Spielvorschlaege context
+                    vorschlaege_text = ""
+                    if state.get("vorschlaege"):
+                        vorschlaege_text = "\n\nAKTUELLE SPIELVORSCHLAEGE AUF DEM SERVER:\n"
+                        for aid, d in state["vorschlaege"].items():
+                            titel   = d.get("title", "Unbekannt")
+                            hat     = d.get("hat",     [])
+                            spielen = d.get("spielen", [])
+                            nein    = d.get("nein",    [])
+                            vorschlaege_text += f"- {titel}: ✅{len(hat)} ❤️{len(spielen)} 👎{len(nein)}\n"
+
+                    prompt = VENTINGTON_SYSTEM_PROMPT + lilith_hinweis + vorschlaege_text + f"\n\nHeutiges Datum und Uhrzeit: {heute}\n\nGespraech:\n"
                     for eintrag in verlauf:
                         rolle = "Nutzer" if eintrag["role"] == "user" else "Ventington"
                         prompt += f"{rolle}: {eintrag['parts'][0]}\n"
@@ -623,6 +701,15 @@ async def on_message(message: discord.Message):
                         contents=prompt
                     )
                     antwort_text = antwort.text.strip()
+
+                    # Wetter-Anfrage erkennen
+                    import re as _re
+                    wetter_match = _re.search(r'\[WETTER:([^\]]+)\]', antwort_text)
+                    if wetter_match:
+                        stadtname = wetter_match.group(1).strip()
+                        wetter_info = await get_wetter(stadtname)
+                        antwort_text = _re.sub(r'\[WETTER:[^\]]+\]', wetter_info, antwort_text)
+
                     verlauf.append({"role": "model", "parts": [antwort_text]})
                     chat_sessions[uid] = verlauf
                     if len(antwort_text) > 2000:
