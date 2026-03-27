@@ -745,7 +745,7 @@ async def on_message(message: discord.Message):
                 except Exception as e:
                     print(f"GEMINI FEHLER: {e}")
                     err_str = str(e).lower()
-                    if "per_minute" in err_str or "rpm" in err_str or "rate" in err_str:
+                    if "perminute" in err_str or "per_minute" in err_str or "rpm" in err_str or "requests_per_minute" in err_str or "minute" in err_str:
                         hinweis = "Meine kurzfristigen Kapazitäten sind erschöpft. In etwa **1 Minute** bin ich wieder ansprechbar. 🎩"
                     else:
                         reset_zeit = (datetime.now(berlin).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime("%d.%m.%Y um 00:00 Uhr")
