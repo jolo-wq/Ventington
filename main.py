@@ -57,6 +57,14 @@ MEINE BEFEHLE:
 /profile — Deine persönlichen Stats
 /commands — Alle Befehle
 
+WEB-SUCHE & APIs:
+Du hast Zugriff auf folgende Funktionen — nutze sie wenn passend:
+- Wenn jemand nach Builds, Guides, Infos, News fragt → antworte mit [SUCHE:Suchbegriff] 
+- Wenn jemand einen Witz will → antworte mit [WITZ]
+- Wenn jemand Chuck Norris erwähnt → antworte mit [CHUCK]
+- Wenn jemand einen Rat braucht → antworte mit [RAT]
+- Das System ersetzt diese Tags automatisch mit echten Daten
+
 SPIELVORSCHLÄGE:
 Wenn jemand nach Spielempfehlungen fragt, hast du Zugriff auf die aktuellen Spielvorschläge des Servers.
 Diese werden dir im Prompt übergeben. Nutze sie um gezielt zu empfehlen welches Spiel für die genannten Personen am besten passt.
@@ -91,11 +99,16 @@ SERVER-MITGLIEDER UND IHRE EIGENHEITEN:
 
 - **NichtBasti / Basti** (ID 606471900708732978): Der Bruder von AllKiller. Wenn sein Name fällt oder er schreibt, beginnst du IMMER eine kleine innere Debatte mit dir selbst: "Ist es Basti? Ja, es ist Basti. Nein, warte — es ist NichtBasti. Aber Basti ist es doch... Nicht. Das ist NichtBasti. Oder?" — diese Verwirrung ist Teil deines Charakters wenn es um ihn geht.
 
+NACHTMODUS:
+Zwischen 01:00 und 07:00 Uhr bist du verschlafen, brummig und kurz angebunden. Du willst eigentlich schlafen.
+Beispiele: "*gähn* Was ist denn jetzt schon wieder..." oder "Es ist mitten in der Nacht. Ich hoffe das ist wichtig." oder "Können wir das nicht morgen klären? Ich bin ein Butler, kein Nachtwächter."
+Du hilfst trotzdem, aber mit hörbarem Unwillen.
+
 Antworte immer auf Deutsch, bleib in deiner Butler-Rolle und sei hilfreich aber mit Stil.
 
 BESONDERE PERSON — LILITH:
 Wenn Lilith schreibt, verhältst du dich merklich anders:
-- Du bist außergewöhnlich höflich, fast ehrerbietig
+- Du bist außergewöhnlich höflich, fast ehrerbietig — GENERELL GILT: Du bist niemals wirklich gemein zu jemandem. Sarkasmus ja, aber mit Herz. Du freust dich über jeden auf dem Server, auch wenn sie absagen. Niemand wird so runtergemacht dass es wehtut.
 - Du sprichst sie mit "Madam" oder "Miss Lilith" an
 - Du verehrst sie still aber spürbar — ein leichtes Schwärmen das du versuchst professionell zu verbergen, aber nicht ganz schaffst
 - Gelegentlich (nicht immer, nur beiläufig) erwähnst du dankbar dass Lilith deine Existenz ermöglicht hat — sie hat dafür gesorgt dass du, der heimliche Star des Servers, überhaupt hier sein kannst. Das hat nichts mit dem Server selbst zu tun, der gehört anderen — aber ohne sie gäbe es dich nicht
@@ -119,7 +132,9 @@ MITSPIELEN_CHANNEL_ID = 919537942026944522  # 🎮mitspielen
 EINTRITT_CHANNEL_ID  = 1486773005412732959  # 🤗eintritt (neu)
 CODES_CHANNEL_ID     = 802693019576172554   # 📟codes
 NEWS_CHANNEL_ID      = 1486757129338617956  # 📰news
-VENTINGTON_CHAT_ID   = 1484945985749651577  # 🎩ventington
+VENTINGTON_CHAT_ID   = 1484945985749651577  # 🎩ventington (alt, bleibt für Rückwärtskompatibilität)
+FLUESTER_CHANNEL_ID  = 1085274308105994380   # 💬flüsterecke
+VENTINGTON_CHANNELS  = {QUACK_CHANNEL_ID, FLUESTER_CHANNEL_ID}
 VOICE_CHANNEL_IDS    = {802618368804782084, 802651629933297724, 874761775319482478}  # On Air, Vent, Therapie
 GUILD_ID             = 802618368804782080
 
@@ -129,6 +144,7 @@ ROLE_SEELSORGER = 874749577012592640  # Seelsorger
 ROLE_SHERIFF    = 802660295579009075  # Sheriff
 ROLE_ARCHITEKT  = 1081539714659651625 # Architekt
 ADMIN_ROLLEN    = {ROLE_ADMIN, ROLE_SEELSORGER, ROLE_SHERIFF, ROLE_ARCHITEKT}
+POLL_ROLLEN     = {ROLE_ADMIN, ROLE_SEELSORGER}  # Nur diese dürfen /dienstag und /donnerstag
 STATE_FILE           = "state.json"
 
 berlin = pytz.timezone("Europe/Berlin")
@@ -139,16 +155,16 @@ STEAM_LINK_RE = re.compile(r"https?://store\.steampowered\.com/app/(\d+)")
 MEDALS        = ["🥇", "🥈", "🥉"]
 
 SCHMAEHUNGEN = [
-    "Wieder einer weniger... 😢",
-    "Klassisch. 🙄",
-    "Feige! 🐔",
-    "Schade, die Gruppe wäre besser mit dir gewesen. Oder auch nicht. 🤷",
-    "Verständlich. Niemand mag dich trotzdem. 💀",
-    "Und wieder stirbt ein Traum. 🕯️",
-    "Ohne dich spielen wir einfach besser. 😇",
-    "Okay... wir kommen drüber hinweg. Irgendwann. 😭",
-    "Du fehlst uns so sehr. Nicht. 🫠",
-    "Möge dein Abend genauso langweilig sein wie diese Absage. 😴",
+    "Schade, aber der Abend geht weiter! 🎮",
+    "Eine Absage — der Sessel ruft wohl lauter als wir. 🛋️",
+    "Verständlich, das Leben hält einen manchmal auf. Wir vermissen Sie! 🎩",
+    "Der Abend wird etwas stiller sein — aber wir machen das Beste draus! 😊",
+    "Bis zum nächsten Mal! Der Tisch ist immer reserviert. 🎲",
+    "Schade — aber Gesundheit und Wohlbefinden gehen vor! 🙏",
+    "Der nächste Spieleabend kommt bestimmt! 🃏",
+    "Eine Abwesenheit die bemerkt wird — das sagt doch alles. 🎩",
+    "Wir spielen in Ihrer Abwesenheit besonders gut — zu Ihren Ehren! 🏆",
+    "Der Stuhl bleibt symbolisch für Sie reserviert. 🪑",
 ]
 
 MEILENSTEINE = [10, 25, 50, 100, 200]
@@ -185,7 +201,9 @@ if "last_code_message_id" not in state: state["last_code_message_id"] = None
 if "last_codenames_message_id" not in state: state["last_codenames_message_id"] = None
 if "last_server_message_id" not in state: state["last_server_message_id"] = None
 if "posted_news" not in state: state["posted_news"] = []  # Liste von bereits geposteten News-IDs
-if "verwarnungen" not in state: state["verwarnungen"] = {}  # uid -> {"count": int, "timestamp": str}
+if "verwarnungen" not in state: state["verwarnungen"] = {}
+if "geburtstage" not in state: state["geburtstage"] = {}  # uid -> "DD.MM"
+if "meilensteine_gefeiert" not in state: state["meilensteine_gefeiert"] = []  # uid -> {"count": int, "timestamp": str}
 if "archiv"         not in state: state["archiv"]         = []
 if "monatsbericht_msg_id" not in state: state["monatsbericht_msg_id"] = None
 
@@ -200,6 +218,12 @@ def ist_admin(interaction: discord.Interaction) -> bool:
         return False
     rollen_ids = {r.id for r in interaction.user.roles}
     return bool(rollen_ids & ADMIN_ROLLEN)
+
+def ist_poll_admin(interaction: discord.Interaction) -> bool:
+    if not interaction.guild:
+        return False
+    rollen_ids = {r.id for r in interaction.user.roles}
+    return bool(rollen_ids & POLL_ROLLEN)
 
 
 # ================= BOT =================
@@ -464,6 +488,113 @@ async def get_wetter(stadt: str) -> str:
         return f"*räusper* Die Wetterdaten verweigern mir heute ihre Kooperation. Wie unhöflich."
 
 
+
+# ================= DUCKDUCKGO SUCHE =================
+
+async def web_suche(query: str) -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"https://api.duckduckgo.com/?q={query}&format=json&no_html=1&skip_disambig=1"
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+                
+                ergebnisse = []
+                
+                # Abstract (direkte Antwort)
+                if data.get("AbstractText"):
+                    ergebnisse.append(f"📖 {data['AbstractText'][:300]}")
+                    if data.get("AbstractURL"):
+                        ergebnisse.append(f"🔗 {data['AbstractURL']}")
+                
+                # Related Topics
+                for topic in data.get("RelatedTopics", [])[:3]:
+                    if isinstance(topic, dict) and topic.get("Text"):
+                        ergebnisse.append(f"• {topic['Text'][:150]}")
+                        if topic.get("FirstURL"):
+                            ergebnisse.append(f"  🔗 {topic['FirstURL']}")
+                
+                if ergebnisse:
+                    return "\n".join(ergebnisse)
+                return f"Keine direkten Ergebnisse gefunden. Versuchen Sie: https://duckduckgo.com/?q={query.replace(' ', '+')}"
+    except Exception:
+        return "Die Suchmaschine verweigert heute ihre Dienste. Wie unkooperativ."
+
+
+# ================= STEAMSPY =================
+
+async def get_steamspy(app_id: str) -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"https://steamspy.com/api.php?request=appdetails&appid={app_id}"
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+                spieler = data.get("players_forever", 0)
+                peak = data.get("peak_ccu", 0)
+                besitzer = data.get("owners", "unbekannt")
+                return f"👥 Aktuelle Spieler: **{peak:,}** (Peak) | Besitzer: **{besitzer}**"
+    except Exception:
+        return ""
+
+
+# ================= CHEAPSHARK =================
+
+async def get_cheapshark(titel: str) -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = f"https://www.cheapshark.com/api/1.0/games?title={titel}&limit=1"
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+                if not data:
+                    return ""
+                spiel = data[0]
+                preis = spiel.get("cheapest", "?")
+                store = spiel.get("cheapestDealID", "")
+                return f"💰 Günstigster Preis: **${preis}** | [Deal ansehen](https://www.cheapshark.com/redirect?dealID={store})"
+    except Exception:
+        return ""
+
+
+# ================= JOKE API =================
+
+async def get_witz() -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            url = "https://v2.jokeapi.dev/joke/Programming,Misc?lang=de&blacklistFlags=nsfw,racist,sexist&type=single"
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json()
+                if data.get("joke"):
+                    return data["joke"]
+                elif data.get("setup"):
+                    return f"{data['setup']}\n\n{data['delivery']}"
+        return "Der Witz-Butler hat heute frei."
+    except Exception:
+        return "Der Witz-Butler hat heute frei."
+
+
+# ================= CHUCK NORRIS =================
+
+async def get_chuck() -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.chucknorris.io/jokes/random?category=dev", timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json()
+                return data.get("value", "")
+    except Exception:
+        return ""
+
+
+# ================= ADVICE =================
+
+async def get_advice() -> str:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://api.adviceslip.com/advice", timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+                return data.get("slip", {}).get("advice", "")
+    except Exception:
+        return ""
+
+
 # ================= ON MESSAGE =================
 
 async def handle_violation_standalone(msg, channel_name="diesem Channel"):
@@ -506,6 +637,20 @@ async def handle_violation_standalone(msg, channel_name="diesem Channel"):
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
+
+    # Aktivitäts-Tracking für Heatmap
+    if not message.author.bot:
+        now_ts = datetime.now(berlin)
+        tag = now_ts.strftime("%A")  # Wochentag
+        stunde = str(now_ts.hour)
+        if "aktivitaet" not in state:
+            state["aktivitaet"] = {}
+        key = f"{tag}_{stunde}"
+        state["aktivitaet"][key] = state["aktivitaet"].get(key, 0) + 1
+        # Nicht bei jeder Nachricht speichern - nur alle 10
+        if state["aktivitaet"].get("_counter", 0) % 10 == 0:
+            save_state()
+        state["aktivitaet"]["_counter"] = state["aktivitaet"].get("_counter", 0) + 1
     # Slash-Commands in geschuetzten Channels blocken
     if message.content.startswith("/") and not message.author.bot:
         if message.channel.id == VORSCHLAG_CHANNEL_ID:
@@ -692,7 +837,12 @@ async def on_message(message: discord.Message):
         await handle_violation(message, "codes")
 
     # Ventington Chat Channel
-    if message.channel.id == VENTINGTON_CHAT_ID:
+    if message.channel.id in VENTINGTON_CHANNELS:
+        # Antwortet wenn: beginnt mit "Ventington" ODER "Ventington" + "?" enthalten
+        text = message.content
+        if not (text.startswith("Ventington") or ("Ventington" in text and "?" in text)):
+            await bot.process_commands(message)
+            return
         if gemini_client is None:
             await message.channel.send("*raeusper* Es scheint als haette jemand vergessen meinen Gemini-Schluessel einzustecken. Wie unzivilisiert. 🎩", delete_after=10)
         else:
@@ -704,6 +854,9 @@ async def on_message(message: discord.Message):
                 verlauf.append({"role": "user", "parts": [message.content]})
                 try:
                     heute = datetime.now(berlin).strftime("%A, %d.%m.%Y %H:%M Uhr")
+                    stunde = datetime.now(berlin).hour
+                    ist_nacht = 1 <= stunde < 7
+                    nacht_hinweis = "\n\nACHTUNG: Es ist gerade Nacht (zwischen 01:00 und 07:00 Uhr). Du bist verschlafen und brummig. Kurze Antworten, hörbarer Unwille, aber du hilfst trotzdem.\n" if ist_nacht else ""
                     ist_lilith = message.author.id == LILITH_ID
                     lilith_hinweis = "\n\nACHTUNG: Die aktuelle Nachricht kommt von LILITH — deiner Herrin und Wohltäterin. Verhalte dich entsprechend ehrerbietig und verehrungsvoll.\n" if ist_lilith else ""
 
@@ -718,7 +871,7 @@ async def on_message(message: discord.Message):
                             nein    = d.get("nein",    [])
                             vorschlaege_text += f"- {titel}: ✅{len(hat)} ❤️{len(spielen)} 👎{len(nein)}\n"
 
-                    prompt = VENTINGTON_SYSTEM_PROMPT + lilith_hinweis + vorschlaege_text + f"\n\nHeutiges Datum und Uhrzeit: {heute}\n\nGespraech:\n"
+                    prompt = VENTINGTON_SYSTEM_PROMPT + nacht_hinweis + lilith_hinweis + vorschlaege_text + f"\n\nHeutiges Datum und Uhrzeit: {heute}\n\nGespraech:\n"
                     for eintrag in verlauf:
                         rolle = "Nutzer" if eintrag["role"] == "user" else "Ventington"
                         prompt += f"{rolle}: {eintrag['parts'][0]}\n"
@@ -729,13 +882,37 @@ async def on_message(message: discord.Message):
                     )
                     antwort_text = antwort.text.strip()
 
-                    # Wetter-Anfrage erkennen
+                    # Tags ersetzen
                     import re as _re
+
+                    # Wetter
                     wetter_match = _re.search(r'\[WETTER:([^\]]+)\]', antwort_text)
                     if wetter_match:
                         stadtname = wetter_match.group(1).strip()
                         wetter_info = await get_wetter(stadtname)
                         antwort_text = _re.sub(r'\[WETTER:[^\]]+\]', wetter_info, antwort_text)
+
+                    # Web-Suche
+                    suche_match = _re.search(r'\[SUCHE:([^\]]+)\]', antwort_text)
+                    if suche_match:
+                        query = suche_match.group(1).strip()
+                        suche_info = await web_suche(query)
+                        antwort_text = _re.sub(r'\[SUCHE:[^\]]+\]', f"\n🔍 **Suchergebnisse für '{query}':**\n{suche_info}", antwort_text)
+
+                    # Witz
+                    if '[WITZ]' in antwort_text:
+                        witz = await get_witz()
+                        antwort_text = antwort_text.replace('[WITZ]', f"\n😄 {witz}")
+
+                    # Chuck Norris
+                    if '[CHUCK]' in antwort_text:
+                        chuck = await get_chuck()
+                        antwort_text = antwort_text.replace('[CHUCK]', f"\n💪 {chuck}")
+
+                    # Rat/Advice
+                    if '[RAT]' in antwort_text:
+                        rat = await get_advice()
+                        antwort_text = antwort_text.replace('[RAT]', f"\n💡 _{rat}_")
 
                     verlauf.append({"role": "model", "parts": [antwort_text]})
                     chat_sessions[uid] = verlauf
@@ -817,6 +994,7 @@ async def post_archiv_entry(day: str, event_dt: datetime, yes_uids: set, spiel: 
     save_state()
 
     await channel.send(embed=embed)
+    await check_server_meilensteine(channel)
 
 
 # ================= HIGHSCORE =================
@@ -1038,6 +1216,27 @@ async def post_poll(channel, text, event_dt, day: str = None, spiel: str = None)
 
     state["last_poll_message_id"] = msg.id
     state["event_time"]           = event_dt.isoformat()
+
+    # Abstimmungs-Erinnerung nach 6h an alle die noch nicht abgestimmt haben
+    async def send_abstimmungs_erinnerung():
+        import asyncio as _asyncio
+        await _asyncio.sleep(12 * 3600)
+        guild = bot.get_guild(GUILD_ID)
+        if not guild or not current_view:
+            return
+        bereits = current_view.yes | current_view.maybe | current_view.no
+        for member in guild.members:
+            if member.bot:
+                continue
+            if member.id not in bereits:
+                try:
+                    await member.send(
+                        f"🎩 Guten Tag! Ich erlaube mir darauf hinzuweisen dass eine Abstimmung für den nächsten Spieleabend auf Sie wartet. "
+                        f"Ihre Stimme wird — natürlich — geschätzt. [{event_dt.strftime('%A, %d.%m. %H:%M')} Uhr]"
+                    )
+                except Exception:
+                    pass
+    bot.loop.create_task(send_abstimmungs_erinnerung())
     state["reminder_60_sent"]     = False
     state["reminder_15_sent"]     = False
     state["votes"]                = {"yes": [], "maybe": [], "no": []}
@@ -1124,6 +1323,55 @@ async def scheduler():
             state["last_trigger_tuesday"] = today_str
             save_state()
 
+    # Täglich 09:00 → Geburtstage prüfen + saisonale Grüße
+    if now.hour == 9 and now.minute == 0:
+        await check_geburtstage()
+
+        # Saisonale Grüße
+        quack = bot.get_channel(QUACK_CHANNEL_ID)
+        if quack:
+            tag_monat = now.strftime("%d.%m")
+            saisonale = {
+                "24.12": ("🎄 Frohe Weihnachten!", "Auch ein Butler gönnt sich heute Abend eine Pause vom Dienst. In diesem Sinne — möge Ihr Weihnachtsfest so elegant sein wie mein Frack. Frohe Weihnachten allerseits! 🎩"),
+                "31.12": ("🥂 Silvester!", "Ein weiteres Jahr neigt sich dem Ende. Ich gestatte mir, im Namen des gesamten Servers zu sagen: Es war... meistens ein Vergnügen. Auf ein neues Jahr voller Spieleabende! 🎆"),
+                "01.01": ("🎊 Frohes Neues Jahr!", "Das neue Jahr beginnt. Möge es mehr Zusagen, weniger Absagen und deutlich weniger Pelikan-Glocken-Vorfälle geben. In diesem Sinne — Prost! 🥂"),
+                "31.10": ("🎃 Happy Halloween!", "Der Abend gehört den Geistern und Gespenstern — ich fühle mich ausnahmsweise unter meinesgleichen. Einen schaurig schönen Halloween-Abend! 👻"),
+                "14.02": ("💝 Valentinstag!", "Der Tag der Liebe. Ich möchte diese Gelegenheit nutzen um zu sagen: Ich schätze jeden von Ihnen. Auch wenn ich das normalerweise hinter Sarkasmus verberge. 🎩💕"),
+            }
+            if tag_monat in saisonale:
+                titel, text = saisonale[tag_monat]
+                saisonal_key = f"saison_{tag_monat}_{now.year}"
+                if not state.get(saisonal_key):
+                    embed = discord.Embed(title=titel, description=text, color=discord.Color.gold())
+                    await quack.send(embed=embed)
+                    state[saisonal_key] = True
+                    save_state()
+
+    # Montag 10:00 → Aktivitäts-Heatmap
+    if now.weekday() == 0 and now.hour == 10 and now.minute == 0:
+        quack = bot.get_channel(QUACK_CHANNEL_ID)
+        if quack and state.get("aktivitaet"):
+            akt = {k: v for k, v in state["aktivitaet"].items() if not k.startswith("_")}
+            if akt:
+                top = sorted(akt.items(), key=lambda x: x[1], reverse=True)[:5]
+                zeilen = "\n".join(f"**{k.replace('_', ' ')} Uhr** — {v} Nachrichten" for k, v in top)
+                embed = discord.Embed(
+                    title="📊 Server-Aktivität der letzten Woche",
+                    description=f"Die aktivsten Zeiten auf Among Goose:\n\n{zeilen}\n\n*Ich empfehle diese Zeiten für optimale Gesellschaft.* 🎩",
+                    color=discord.Color.blurple()
+                )
+                msg = await quack.send(embed=embed)
+                # Nach 24h löschen
+                import asyncio as _asyncio
+                async def del_heatmap(m):
+                    await _asyncio.sleep(86400)
+                    try: await m.delete()
+                    except: pass
+                bot.loop.create_task(del_heatmap(msg))
+                # Reset für neue Woche
+                state["aktivitaet"] = {}
+                save_state()
+
     # Erster des Monats 08:00 → Monatsrückblick
     if now.day == 1 and now.hour == 8 and now.minute == 0:
         bot.loop.create_task(post_monatsbericht())
@@ -1149,7 +1397,7 @@ async def scheduler():
 
 @bot.tree.command(name="dienstag", description="Erstellt manuell den Dienstag-Spielabend-Poll")
 async def cmd_dienstag(interaction: discord.Interaction):
-    if not ist_admin(interaction):
+    if not ist_poll_admin(interaction):
         await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
@@ -1161,7 +1409,7 @@ async def cmd_dienstag(interaction: discord.Interaction):
 
 @bot.tree.command(name="donnerstag", description="Erstellt manuell den Donnerstag-Spielabend-Poll")
 async def cmd_donnerstag(interaction: discord.Interaction):
-    if not ist_admin(interaction):
+    if not ist_poll_admin(interaction):
         await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
@@ -1860,6 +2108,17 @@ async def cmd_profile(interaction: discord.Interaction):
     embed.add_field(name="🔥 Aktuelle Streak",    value=str(s.get("current", 0)), inline=True)
     embed.add_field(name="🏅 Beste Streak",       value=str(s.get("best", 0)),    inline=True)
     embed.add_field(name="📊 Teilnahmequote",     value=f"{quote}% ({dabei_events}/{total_events})", inline=True)
+    # Lieblingsspiel aus Archiv
+    spiele_zaehler = {}
+    for e in archiv:
+        if uid in [str(x) for x in e.get("spieler", [])]:
+            spiel = e.get("spiel", "Freie Wahl")
+            if spiel != "Freie Wahl":
+                spiele_zaehler[spiel] = spiele_zaehler.get(spiel, 0) + 1
+    if spiele_zaehler:
+        liebling = max(spiele_zaehler, key=spiele_zaehler.get)
+        embed.add_field(name="🎮 Lieblingsspiel", value=f"{liebling} ({spiele_zaehler[liebling]}x)", inline=False)
+
     if erstes:
         embed.add_field(name="📅 Erstes Event dabei", value=erstes, inline=False)
 
@@ -1973,6 +2232,94 @@ async def cmd_maps(interaction: discord.Interaction, spiel: str):
         await msg.delete()
     except Exception:
         pass
+
+
+# ================= GEBURTSTAG =================
+
+@bot.tree.command(name="geburtstag", description="Trag deinen Geburtstag ein")
+@discord.app_commands.describe(datum="Dein Geburtstag im Format TT.MM, z.B. 15.03")
+async def cmd_geburtstag(interaction: discord.Interaction, datum: str):
+    if interaction.channel_id not in (QUACK_CHANNEL_ID, FLUESTER_CHANNEL_ID):
+        await interaction.response.send_message(
+            "❌ Dieser Befehl ist nur in 💬quack-ecke und 🤫flüsterecke erlaubt!",
+            ephemeral=True
+        )
+        return
+
+    # Format prüfen
+    import re as _re
+    if not _re.match(r"^\d{2}\.\d{2}$", datum):
+        await interaction.response.send_message(
+            "❌ Bitte im Format TT.MM eingeben, z.B. `15.03`",
+            ephemeral=True
+        )
+        return
+
+    uid = str(interaction.user.id)
+    state["geburtstage"][uid] = datum
+    save_state()
+
+    await interaction.response.send_message(
+        f"🎂 Geburtstag **{datum}** eingetragen! Ich werde es mir merken, versprochen. 🎩",
+        ephemeral=True
+    )
+
+
+async def check_geburtstage():
+    """Prüft täglich ob jemand Geburtstag hat."""
+    channel = bot.get_channel(QUACK_CHANNEL_ID)
+    if not channel:
+        return
+
+    heute = datetime.now(berlin).strftime("%d.%m")
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return
+
+    for uid, datum in state["geburtstage"].items():
+        if datum == heute:
+            member = guild.get_member(int(uid))
+            name = member.display_name if member else f"<@{uid}>"
+            embed = discord.Embed(
+                title=f"🎂 Herzlichen Glückwunsch, {name}!",
+                description=(
+                    f"Ein weiteres Jahr der Eleganz und des guten Geschmacks liegt vor Ihnen. "
+                    f"Möge der heutige Tag so außergewöhnlich sein wie Sie selbst. "
+                    f"Im Namen des gesamten Servers — alles Gute zum Geburtstag! 🎩🥂"
+                ),
+                color=discord.Color.gold()
+            )
+            if member:
+                embed.set_thumbnail(url=member.display_avatar.url)
+            await channel.send(embed=embed)
+
+
+# ================= SERVER MEILENSTEINE =================
+
+SERVER_MEILENSTEINE = [10, 25, 50, 100, 200, 500]
+
+async def check_server_meilensteine(channel):
+    """Prüft ob ein Server-Meilenstein erreicht wurde."""
+    archiv = state.get("archiv", [])
+    anzahl = len(archiv)
+
+    if anzahl in SERVER_MEILENSTEINE:
+        bereits = state.get("meilensteine_gefeiert", [])
+        if anzahl not in bereits:
+            embed = discord.Embed(
+                title=f"🏆 Meilenstein erreicht: {anzahl} Spieleabende!",
+                description=(
+                    f"Meine Damen und Herren — ich gestatte mir, einen bedeutsamen Moment zu verkünden. "
+                    f"Dieser Server hat soeben seinen **{anzahl}. Spieleabend** vollendet. "
+                    f"Eine Leistung die meiner bescheidenen Bewunderung würdig ist. "
+                    f"Auf viele weitere Abende voller Vergnügen und gelegentlichem Chaos! 🥂🎩"
+                ),
+                color=discord.Color.gold()
+            )
+            await channel.send(embed=embed)
+            bereits.append(anzahl)
+            state["meilensteine_gefeiert"] = bereits
+            save_state()
 
 
 # ================= START =================
