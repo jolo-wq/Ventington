@@ -203,7 +203,8 @@ if "last_server_message_id" not in state: state["last_server_message_id"] = None
 if "posted_news" not in state: state["posted_news"] = []  # Liste von bereits geposteten News-IDs
 if "verwarnungen" not in state: state["verwarnungen"] = {}
 if "geburtstage" not in state: state["geburtstage"] = {}  # uid -> "DD.MM"
-if "meilensteine_gefeiert" not in state: state["meilensteine_gefeiert"] = []  # uid -> {"count": int, "timestamp": str}
+if "meilensteine_gefeiert" not in state: state["meilensteine_gefeiert"] = []
+if "achievements" not in state: state["achievements"] = {}  # uid -> [liste von achievement keys]  # uid -> {"count": int, "timestamp": str}
 if "archiv"         not in state: state["archiv"]         = []
 if "monatsbericht_msg_id" not in state: state["monatsbericht_msg_id"] = None
 
@@ -285,6 +286,12 @@ class EventView(discord.ui.View):
     async def maybe_button(self, interaction, button):
         self.remove_user(interaction.user.id)
         self.maybe.add(interaction.user.id)
+        # Vielleicht-Counter
+        uid = str(interaction.user.id)
+        if "vielleicht_counter" not in state:
+            state["vielleicht_counter"] = {}
+        state["vielleicht_counter"][uid] = state["vielleicht_counter"].get(uid, 0) + 1
+        save_state()
         await self.update_message(interaction)
 
     @discord.ui.button(label="Absagen",    style=discord.ButtonStyle.red,   emoji="👎", custom_id="vote_no")
@@ -1170,6 +1177,9 @@ async def post_poll(channel, text, event_dt, day: str = None, spiel: str = None)
             record_yes_votes(day, yes_uids)
             meilensteine = update_streaks(yes_uids, all_known)
             await update_highscore_post()
+            # Achievements prüfen
+            for uid in yes_uids:
+                await check_achievements(uid, channel)
 
             # Glückwunschnachrichten für Meilensteine
             for uid, gesamt in meilensteine:
@@ -1377,6 +1387,29 @@ async def scheduler():
     # Erster des Monats 08:00 → Monatsrückblick
     if now.day == 1 and now.hour == 8 and now.minute == 0:
         bot.loop.create_task(post_monatsbericht())
+
+    # Automatische Lobby-Rotation: Code löschen wenn älter als 1h und niemand im Voice
+    code_mid = state.get("last_code_message_id")
+    code_ts  = state.get("last_code_posted_at")
+    if code_mid and code_ts:
+        alter = (datetime.now(berlin) - datetime.fromisoformat(code_ts).astimezone(berlin)).total_seconds()
+        if alter > 3600:
+            niemand_im_voice = all(
+                len(bot.get_channel(vc_id).members) == 0
+                for vc_id in VOICE_CHANNEL_IDS
+                if bot.get_channel(vc_id)
+            )
+            if niemand_im_voice:
+                codes_ch = bot.get_channel(CODES_CHANNEL_ID)
+                if codes_ch:
+                    try:
+                        old = await codes_ch.fetch_message(code_mid)
+                        await old.delete()
+                    except Exception:
+                        pass
+                state["last_code_message_id"]  = None
+                state["last_code_posted_at"]   = None
+                save_state()
 
     # Reminder
     if event_time:
@@ -2122,6 +2155,12 @@ async def cmd_profile(interaction: discord.Interaction):
         liebling = max(spiele_zaehler, key=spiele_zaehler.get)
         embed.add_field(name="🎮 Lieblingsspiel", value=f"{liebling} ({spiele_zaehler[liebling]}x)", inline=False)
 
+    # Achievements
+    achs = get_achievements(interaction.user.id)
+    if achs:
+        ach_text = " ".join(ACHIEVEMENTS[k][0] for k in achs if k in ACHIEVEMENTS)
+        embed.add_field(name="🏅 Achievements", value=ach_text, inline=False)
+
     if erstes:
         embed.add_field(name="📅 Erstes Event dabei", value=erstes, inline=False)
 
@@ -2324,6 +2363,120 @@ async def check_server_meilensteine(channel):
             bereits.append(anzahl)
             state["meilensteine_gefeiert"] = bereits
             save_state()
+
+
+# ================= ACHIEVEMENTS =================
+
+ACHIEVEMENTS = {
+    # Einfach
+    "erster_zusager":    ("🎯", "Frühaufsteher",        "Als erstes beim Poll abgestimmt"),
+    "nachtaktiv":        ("🌙", "Nachtaktiv",            "Nach Mitternacht abgestimmt"),
+    "zu_spaet":          ("🐌", "Zu spät!",              "Nach dem 15-Minuten-Reminder noch abgestimmt"),
+    "willkommen":        ("👋", "Willkommen!",           "Erste Zusage überhaupt"),
+    "donnerstags_kind":  ("🎲", "Donnerstags-Kind",      "5x donnerstags zugesagt"),
+    # Mittel
+    "streak_5":          ("🔥", "Streak x5",             "5 Events in Folge dabei"),
+    "stammgast":         ("👑", "Stammgast",             "25 Zusagen gesamt"),
+    "dienstags_held":    ("🎮", "Dienstags-Held",        "10x dienstags zugesagt"),
+    "blitzschnell":      ("⚡", "Blitzschnell",          "Innerhalb 5 Minuten nach Poll abgestimmt"),
+    "unentschlossen":    ("🤷", "Unentschlossen",        "10x Vielleicht geklickt"),
+    # Schwer
+    "legende":           ("💎", "Legende",               "50 Zusagen gesamt"),
+    "streak_10":         ("🔥🔥", "Streak x10",          "10 Events in Folge dabei"),
+    "allrounder":        ("🏆", "Allrounder",            "Di & Do je 10x dabei"),
+    "fruehbucher":       ("🌅", "Frühbucher",            "24h vor Event abgestimmt"),
+    # Legendär
+    "geist":             ("👻", "Geist",                 "100 Zusagen gesamt"),
+    "streak_20":         ("🔥🔥🔥", "Streak x20",        "20 Events in Folge dabei"),
+    "ventingtons_liebling": ("🎩", "Ventingtons Liebling", "Von Ventington persönlich ernannt"),
+    "pelikan_ueberlebender": ("🐦", "Pelikan-Überlebender", "Hat die Glocke überlebt — oder war es der Pelikan?"),
+}
+
+def get_achievements(uid: str) -> list:
+    return state["achievements"].get(str(uid), [])
+
+def grant_achievement(uid: str, key: str) -> bool:
+    """Gibt Achievement. Gibt True zurück wenn neu."""
+    uid = str(uid)
+    if key not in state["achievements"].get(uid, []):
+        if uid not in state["achievements"]:
+            state["achievements"][uid] = []
+        state["achievements"][uid].append(key)
+        save_state()
+        return True
+    return False
+
+async def announce_achievement(channel, uid: int, key: str):
+    """Postet Achievement-Ankündigung."""
+    if key not in ACHIEVEMENTS:
+        return
+    emoji, name, beschreibung = ACHIEVEMENTS[key]
+    embed = discord.Embed(
+        title=f"{emoji} Achievement freigeschaltet!",
+        description=f"<@{uid}> hat **{name}** erreicht!\n_{beschreibung}_",
+        color=discord.Color.gold()
+    )
+    msg = await channel.send(embed=embed)
+    import asyncio as _a
+    async def del_ach(m):
+        await _a.sleep(300)
+        try: await m.delete()
+        except: pass
+    channel.guild and channel.guild.me and asyncio.get_event_loop().create_task(del_ach(msg))
+
+async def check_achievements(uid: int, channel):
+    """Prüft alle automatischen Achievements für einen User."""
+    uid_str = str(uid)
+    di  = state["highscores"]["dienstag"].get(uid_str, 0)
+    do  = state["highscores"]["donnerstag"].get(uid_str, 0)
+    gesamt = di + do
+    streak = state["streaks"].get(uid_str, {}).get("current", 0)
+    vielleicht_count = state.get("vielleicht_counter", {}).get(uid_str, 0)
+
+    checks = [
+        ("willkommen",       gesamt >= 1),
+        ("donnerstags_kind", do >= 5),
+        ("streak_5",         streak >= 5),
+        ("stammgast",        gesamt >= 25),
+        ("dienstags_held",   di >= 10),
+        ("unentschlossen",   vielleicht_count >= 10),
+        ("legende",          gesamt >= 50),
+        ("streak_10",        streak >= 10),
+        ("allrounder",       di >= 10 and do >= 10),
+        ("streak_20",        streak >= 20),
+        ("geist",            gesamt >= 100),
+    ]
+
+    for key, bedingung in checks:
+        if bedingung and grant_achievement(uid, key):
+            await announce_achievement(channel, uid, key)
+
+
+# ================= ACHIEVEMENT COMMAND =================
+
+@bot.tree.command(name="achievement", description="Verleiht manuell ein Achievement (nur Admins)")
+@discord.app_commands.describe(
+    mitglied="Wem soll das Achievement verliehen werden?",
+    achievement="Welches Achievement? (liebling oder pelikan)"
+)
+@discord.app_commands.choices(achievement=[
+    discord.app_commands.Choice(name="🎩 Ventingtons Liebling", value="ventingtons_liebling"),
+    discord.app_commands.Choice(name="🐦 Pelikan-Überlebender", value="pelikan_ueberlebender"),
+])
+async def cmd_achievement(interaction: discord.Interaction, mitglied: discord.Member, achievement: str):
+    if not ist_admin(interaction):
+        await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    channel = bot.get_channel(QUACK_CHANNEL_ID)
+
+    if grant_achievement(mitglied.id, achievement):
+        if channel:
+            await announce_achievement(channel, mitglied.id, achievement)
+        await interaction.followup.send(f"✅ Achievement verliehen!", ephemeral=True)
+    else:
+        await interaction.followup.send(f"⚠️ Hat das Achievement bereits.", ephemeral=True)
 
 
 # ================= START =================
