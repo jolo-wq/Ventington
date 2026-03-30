@@ -764,6 +764,7 @@ async def on_message(message: discord.Message):
             cn_msg = await message.channel.send(embed=embed)
 
             state["last_codenames_message_id"] = cn_msg.id
+            state["last_codenames_posted_at"] = datetime.now(berlin).isoformat()
             save_state()
 
             import asyncio
@@ -817,6 +818,7 @@ async def on_message(message: discord.Message):
             code_msg = await message.channel.send(embed=embed)
 
             state["last_code_message_id"] = code_msg.id
+            state["last_code_posted_at"] = datetime.now(berlin).isoformat()
             save_state()
 
             import asyncio as _asyncio
@@ -1815,6 +1817,7 @@ async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, pa
 
     msg = await interaction.channel.send(embed=embed)
     state["last_server_message_id"] = msg.id
+    state["last_server_posted_at"] = datetime.now(berlin).isoformat()
     save_state()
 
     await interaction.followup.send("Server gepostet!", ephemeral=True)
@@ -2343,7 +2346,60 @@ async def on_ready():
 
     scheduler.start()
     steam_news_checker.start()
+
+    # Beim Start: alte codes-Channel Posts löschen wenn älter als 3 Stunden
+    codes_channel = bot.get_channel(CODES_CHANNEL_ID)
+    if codes_channel:
+        for key, ts_key in [
+            ("last_code_message_id", "last_code_posted_at"),
+            ("last_codenames_message_id", "last_codenames_posted_at"),
+            ("last_server_message_id", "last_server_posted_at"),
+        ]:
+            mid = state.get(key)
+            ts  = state.get(ts_key)
+            if mid and ts:
+                posted_at = datetime.fromisoformat(ts).astimezone(berlin)
+                alter = (datetime.now(berlin) - posted_at).total_seconds()
+                if alter > 3 * 3600:
+                    try:
+                        old_msg = await codes_channel.fetch_message(mid)
+                        await old_msg.delete()
+                    except Exception:
+                        pass
+                    state[key]    = None
+                    state[ts_key] = None
+        save_state()
     print(f"Scheduler gestartet. {len(state.get('vorschlaege', {}))} Spielvorschlag-Views registriert.")
+
+    # Lösch-Tasks für noch ausstehende codes-Channel Posts neu starten
+    import asyncio as _asyncio
+
+    async def delayed_delete(channel_id, msg_id, state_key, delay=10800):
+        channel = bot.get_channel(channel_id)
+        if not channel:
+            return
+        await _asyncio.sleep(delay)
+        try:
+            msg = await channel.fetch_message(msg_id)
+            await msg.delete()
+        except Exception:
+            pass
+        state[state_key] = None
+        save_state()
+
+    for key in ("last_code_message_id", "last_codenames_message_id", "last_server_message_id"):
+        mid = state.get(key)
+        if mid:
+            # Sofort löschen da wir nicht wissen wie alt es ist
+            channel = bot.get_channel(CODES_CHANNEL_ID)
+            if channel:
+                try:
+                    msg = await channel.fetch_message(mid)
+                    await msg.delete()
+                    state[key] = None
+                    save_state()
+                except Exception:
+                    pass
 
 
 bot.run(TOKEN)
