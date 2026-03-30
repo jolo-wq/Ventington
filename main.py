@@ -2248,6 +2248,7 @@ async def cmd_geburtstag(interaction: discord.Interaction, datum: str):
 
     # Format prüfen
     import re as _re
+    datum = datum.rstrip(".")
     if not _re.match(r"^\d{2}\.\d{2}$", datum):
         await interaction.response.send_message(
             "❌ Bitte im Format TT.MM eingeben, z.B. `15.03`",
