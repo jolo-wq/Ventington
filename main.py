@@ -2500,6 +2500,25 @@ async def on_ready():
     scheduler.start()
     steam_news_checker.start()
 
+    # Verpasste Reminder nachholen
+    if event_time and current_view:
+        now_check = datetime.now(berlin)
+        delta = event_time - now_check
+        channel = bot.get_channel(CHANNEL_ID)
+        if channel:
+            # 1-Stunden-Reminder verpasst?
+            if not reminder_60_sent and delta <= timedelta(minutes=55):
+                await send_reminder(channel, "🔔 Noch 1 Stunde bis zum Event! (nachgeholt)")
+                reminder_60_sent = True
+                state["reminder_60_sent"] = True
+                save_state()
+            # 15-Minuten-Reminder verpasst?
+            if not reminder_15_sent and delta <= timedelta(minutes=10):
+                await send_reminder(channel, "⚡ Noch 15 Minuten bis zum Event! (nachgeholt)")
+                reminder_15_sent = True
+                state["reminder_15_sent"] = True
+                save_state()
+
     # Beim Start: alte codes-Channel Posts löschen wenn älter als 3 Stunden
     codes_channel = bot.get_channel(CODES_CHANNEL_ID)
     if codes_channel:
