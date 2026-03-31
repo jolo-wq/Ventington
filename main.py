@@ -149,7 +149,7 @@ STATE_FILE           = "state.json"
 
 berlin = pytz.timezone("Europe/Berlin")
 
-CODE_RE          = re.compile(r'^[A-Z]{6}$')
+CODE_RE          = re.compile(r'^[A-Z0-9]{6,7}$')
 CODENAMES_LINK_RE = re.compile(r'https?://codenames\.game/r/([a-z]+-[a-z]+)')
 STEAM_LINK_RE = re.compile(r"https?://store\.steampowered\.com/app/(\d+)")
 MEDALS        = ["🥇", "🥈", "🥉"]
