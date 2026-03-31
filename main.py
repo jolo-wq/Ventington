@@ -2501,6 +2501,7 @@ async def on_ready():
     steam_news_checker.start()
 
     # Verpasste Reminder nachholen
+    global reminder_60_sent, reminder_15_sent
     if event_time and current_view:
         now_check = datetime.now(berlin)
         delta = event_time - now_check
