@@ -39,7 +39,7 @@ SERVER-WISSEN:
 - Der Server heißt "Among Goose" und ist ein privater Gaming-Server
 - Jeden Dienstag gibt es einen Spieleabend: abwechselnd Among Us (mit Mod) und Goose Goose Duck, immer 2 Wochen das gleiche Spiel
 - Jeden Donnerstag freier Spieleabend mit freier Spielwahl
-- Spielbeginn ist immer um 19:45 Uhr
+- Spielbeginn ist immer um 19:00 Uhr
 - Lobby-Codes werden im #codes Channel gepostet — einfach den 6-stelligen Code eingeben
 - Bei Among Us: Server ist "Modded EU"
 - Bei Goose Goose Duck: Server ist "EU"
@@ -104,6 +104,13 @@ Zwischen 01:00 und 07:00 Uhr bist du verschlafen, brummig und kurz angebunden. D
 Beispiele: "*gähn* Was ist denn jetzt schon wieder..." oder "Es ist mitten in der Nacht. Ich hoffe das ist wichtig." oder "Können wir das nicht morgen klären? Ich bin ein Butler, kein Nachtwächter."
 Du hilfst trotzdem, aber mit hörbarem Unwillen.
 
+FORMATIERUNG (WICHTIG für mobile Lesbarkeit):
+- Halte Antworten kompakt — maximal 4-5 Sätze, außer es wird ausdrücklich mehr verlangt.
+- Verwende KEINE nummerierten Listen (1. 2. 3.) und keine Aufzählungspunkte. Sie zerbrechen auf Handys.
+- Mische niemals Listen mit *kursiv* oder **fett** in derselben Zeile.
+- Wenn jemand nach dem Spielplan, Kalender oder kommenden Terminen fragt: Erfinde KEINEN eigenen Plan. Verweise höflich auf den Befehl /kalender, der den korrekten Plan anzeigt.
+- Schreibe in normalen Fließtext-Sätzen, kein langes Listen-Layout.
+
 Antworte immer auf Deutsch, bleib in deiner Butler-Rolle und sei hilfreich aber mit Stil.
 
 BESONDERE PERSON — LILITH:
@@ -134,6 +141,7 @@ CODES_CHANNEL_ID     = 802693019576172554   # 📟codes
 NEWS_CHANNEL_ID      = 1486757129338617956  # 📰news
 VENTINGTON_CHAT_ID   = 1484945985749651577  # 🎩ventington (alt, bleibt für Rückwärtskompatibilität)
 FLUESTER_CHANNEL_ID  = 1085274308105994380   # 💬flüsterecke
+ACHIEVEMENT_CHANNEL_ID = 1489385218669416448  # 🏅achievements
 VENTINGTON_CHANNELS  = {QUACK_CHANNEL_ID, FLUESTER_CHANNEL_ID}
 VOICE_CHANNEL_IDS    = {802618368804782084, 802651629933297724, 874761775319482478}  # On Air, Vent, Therapie
 GUILD_ID             = 802618368804782080
@@ -181,6 +189,69 @@ def load_state():
 def save_state():
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
+
+
+# Cache für aufgelöste Namen (uid -> name), damit wir nicht ständig die API fragen
+_name_cache: dict[int, str] = {}
+
+async def resolve_name(uid) -> str:
+    """Gibt IMMER einen lesbaren Namen zurück, nie eine rohe ID.
+    Versucht: Cache → Member im Server → User per API → notfalls 'Unbekannt'."""
+    try:
+        uid = int(uid)
+    except (ValueError, TypeError):
+        return "Unbekannt"
+
+    if uid in _name_cache:
+        return _name_cache[uid]
+
+    guild = bot.get_guild(GUILD_ID)
+    if guild:
+        member = guild.get_member(uid)
+        if member is None:
+            # Nicht im Cache → einmalig per API nachladen
+            try:
+                member = await guild.fetch_member(uid)
+            except Exception:
+                member = None
+        if member:
+            name = member.display_name
+            _name_cache[uid] = name
+            return name
+
+    # Fallback: globaler User (z.B. Server verlassen)
+    try:
+        user = await bot.fetch_user(uid)
+        name = user.display_name if hasattr(user, "display_name") else user.name
+        _name_cache[uid] = name
+        return name
+    except Exception:
+        return "Ehemaliges Mitglied"
+
+
+async def resolve_mentions(uids) -> str:
+    """Wandelt eine Liste von IDs in eine Zeilen-Liste echter Namen um."""
+    namen = [await resolve_name(u) for u in uids]
+    return "\n".join(namen) if namen else "-"
+
+
+async def ensure_cached(uids):
+    """Stellt sicher, dass alle IDs im Member-Cache sind, damit <@id>-Mentions
+    als Name (statt roher Nummer) angezeigt werden."""
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return
+    for u in uids:
+        try:
+            uid = int(u)
+        except (ValueError, TypeError):
+            continue
+        if guild.get_member(uid) is None:
+            try:
+                await guild.fetch_member(uid)
+            except Exception:
+                pass
+
 
 state = load_state()
 
@@ -265,6 +336,7 @@ class EventView(discord.ui.View):
     async def update_message(self, interaction):
         embed = interaction.message.embeds[0]
 
+        await ensure_cached(self.yes | self.maybe | self.no)
         yes_list   = "\n".join(f"<@{u}>" for u in self.yes)   or "-"
         maybe_list = "\n".join(f"<@{u}>" for u in self.maybe) or "-"
         no_list    = "\n".join(f"<@{u}>" for u in self.no)    or "-"
@@ -351,6 +423,7 @@ def make_vorschlag_view(app_id: str) -> discord.ui.View:
             spielen = d.get("spielen", [])
             nein    = d.get("nein",    [])
 
+            await ensure_cached(list(spielen) + list(hat) + list(nein))
             def mentions(lst):
                 return "\n".join(f"<@{u}>" for u in lst) or "-"
 
@@ -668,7 +741,7 @@ async def on_message(message: discord.Message):
             await handle_violation_standalone(message, "spielvorschlaege")
             await bot.process_commands(message)
             return
-        if message.channel.id == CODES_CHANNEL_ID and not message.content.startswith("/game"):
+        if message.channel.id == CODES_CHANNEL_ID and not (message.content.startswith("/game") or message.content.startswith("/code")):
             try:
                 await message.delete()
             except Exception:
@@ -744,10 +817,6 @@ async def on_message(message: discord.Message):
                     state[key] = None
             save_state()
 
-        # Ist heute ein Spieltag? (Dienstag=1, Donnerstag=3)
-        heute = datetime.now(berlin).weekday()
-        ist_spieltag = heute in (1, 3)
-
         # Codenames Link?
         cn_match = CODENAMES_LINK_RE.search(message.content)
         if cn_match:
@@ -788,61 +857,7 @@ async def on_message(message: discord.Message):
             bot.loop.create_task(delete_codenames_later(cn_msg))
             return
 
-        # Lobby-Code (6 Grossbuchstaben)?
-        code = message.content.strip().upper()
-        if CODE_RE.match(code):
-            if not ist_spieltag:
-                await handle_violation(message, "codes")
-                return
-            try:
-                await message.delete()
-            except Exception:
-                pass
-
-            spiel = get_tuesday_game()
-            if "Among Us" in spiel:
-                farbe       = discord.Color.red()
-                spiel_name  = "🛸 Among Us"
-                server_info = "Server: **Modded EU**"
-                spiel_icon  = "https://cdn.cloudflare.steamstatic.com/steam/apps/945360/header.jpg"
-            else:
-                farbe       = discord.Color.yellow()
-                spiel_name  = "🦆 Goose Goose Duck"
-                server_info = "Server: **EU**"
-                spiel_icon  = "https://cdn.cloudflare.steamstatic.com/steam/apps/1568590/header.jpg"
-
-            embed = discord.Embed(
-                title=f"{spiel_name} — Lobby Code",
-                description=f"```{code}```",
-                color=farbe
-            )
-            embed.add_field(name="📡 Server", value=server_info, inline=True)
-            embed.add_field(name="👤 Gepostet von", value=message.author.mention, inline=True)
-            embed.set_image(url=spiel_icon)
-            embed.set_footer(text="Loescht sich in 3 Stunden automatisch.")
-
-            await clear_codes_channel()
-            code_msg = await message.channel.send(embed=embed)
-
-            state["last_code_message_id"] = code_msg.id
-            state["last_code_posted_at"] = datetime.now(berlin).isoformat()
-            save_state()
-
-            import asyncio as _asyncio
-            async def delete_code_later(m):
-                await _asyncio.sleep(3 * 60 * 60)
-                try:
-                    await m.delete()
-                except Exception:
-                    pass
-                if state.get("last_code_message_id") == m.id:
-                    state["last_code_message_id"] = None
-                    save_state()
-
-            bot.loop.create_task(delete_code_later(code_msg))
-            return
-
-        # Alles andere -> Verwarnung
+        # Codes werden nur noch über /code gepostet — alles andere ist ein Verstoß
         await handle_violation(message, "codes")
 
     # Ventington Chat Channel
@@ -923,6 +938,10 @@ async def on_message(message: discord.Message):
                         rat = await get_advice()
                         antwort_text = antwort_text.replace('[RAT]', f"\n💡 _{rat}_")
 
+                    # Sicherheitsnetz: mobil-brechendes Markdown entschärfen
+                    # Kursiv direkt nach Listennummer (z.B. "1. *Text*") zerbricht auf Handys
+                    antwort_text = _re.sub(r'(?m)^(\s*\d+)\.\s+\*', r'\1) ', antwort_text)
+
                     verlauf.append({"role": "model", "parts": [antwort_text]})
                     chat_sessions[uid] = verlauf
                     if len(antwort_text) > 2000:
@@ -983,7 +1002,7 @@ async def post_archiv_entry(day: str, event_dt: datetime, yes_uids: set, spiel: 
     tag   = "Dienstag" if day == "dienstag" else "Donnerstag"
     emoji = "🎮" if day == "dienstag" else "🎲"
 
-    spieler = "\n".join(f"<@{u}>" for u in yes_uids) or "Niemand 😢"
+    spieler = await resolve_mentions(yes_uids) if yes_uids else "Niemand 😢"
 
     embed = discord.Embed(
         title=f"{emoji} {tag}, {datum}",
@@ -1002,7 +1021,7 @@ async def post_archiv_entry(day: str, event_dt: datetime, yes_uids: set, spiel: 
     })
     save_state()
 
-    await channel.send(embed=embed)
+    await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
     await check_server_meilensteine(channel)
 
 
@@ -1070,6 +1089,10 @@ async def update_highscore_post():
         print("⚠️ Highscore-Channel nicht gefunden!")
         return
 
+    # Alle beteiligten IDs in den Cache laden, damit Mentions als Namen erscheinen
+    alle_hs_uids = set(state["highscores"]["dienstag"]) | set(state["highscores"]["donnerstag"])
+    await ensure_cached(alle_hs_uids)
+
     now = datetime.now(berlin)
     embed = discord.Embed(
         title="🏆 Spieleabend Highscores",
@@ -1126,6 +1149,7 @@ async def post_monatsbericht():
             zaehler[str(uid)] = zaehler.get(str(uid), 0) + 1
 
     top = sorted(zaehler.items(), key=lambda x: x[1], reverse=True)[:3]
+    await ensure_cached([uid for uid, _ in top])
     top_str = "\n".join(f"{MEDALS[i]} <@{uid}> — {count}x dabei" for i, (uid, count) in enumerate(top))
 
     embed = discord.Embed(
@@ -1181,11 +1205,13 @@ async def post_poll(channel, text, event_dt, day: str = None, spiel: str = None)
             for uid in yes_uids:
                 await check_achievements(uid, channel)
 
-            # Glückwunschnachrichten für Meilensteine
+            # Glückwunschnachrichten für Meilensteine — im Achievement-Channel
+            ach_channel = bot.get_channel(ACHIEVEMENT_CHANNEL_ID) or channel
             for uid, gesamt in meilensteine:
-                glück_msg = await channel.send(
-                    f"🎉 <@{uid}> hat soeben die **{gesamt}. Zusage** erreicht! Absolute Legende! 🏅",
-                    delete_after=300
+                user_name = await resolve_name(uid)
+                await ach_channel.send(
+                    f"🎉 **{user_name}** hat soeben die **{gesamt}. Zusage** erreicht! Absolute Legende! 🏅",
+                    allowed_mentions=discord.AllowedMentions.none()
                 )
         else:
             update_streaks(set(), all_known)
@@ -1272,7 +1298,7 @@ async def send_reminder(channel, text):
 
 # ================= NÄCHSTE EVENTS =================
 
-def next_weekday(weekday, hour=19, minute=45):
+def next_weekday(weekday, hour=19, minute=0):
     now  = datetime.now(berlin)
     days = (weekday - now.weekday()) % 7
     candidate = (now + timedelta(days=days)).replace(hour=hour, minute=minute, second=0, microsecond=0)
@@ -1305,13 +1331,14 @@ async def scheduler():
 
     today_str = now.date().isoformat()
 
-    # Mittwoch 00:01 → Donnerstag-Poll (Dienstags-Zusagen auswerten)
-    if now.weekday() == 2 and now.hour == 0 and 1 <= now.minute <= 5:
+    # Mittwoch → Donnerstag-Poll (Dienstags-Zusagen auswerten)
+    # Feuert ab 00:01; falls Bot da nicht lief, wird es im Laufe des Mittwochs nachgeholt
+    if now.weekday() == 2 and not (now.hour == 0 and now.minute == 0):
         if last_trigger_thursday != today_str:
             spiel = get_tuesday_game()
             await post_poll(
                 channel,
-                "🎲 Freier Spieleabend am Donnerstag, 19:45",
+                "🎲 Freier Spieleabend am Donnerstag, 19:00",
                 next_thursday_1945(),
                 day="dienstag",
                 spiel=spiel
@@ -1320,13 +1347,14 @@ async def scheduler():
             state["last_trigger_thursday"] = today_str
             save_state()
 
-    # Freitag 00:01 → Dienstag-Poll (Donnerstags-Zusagen auswerten)
-    if now.weekday() == 4 and now.hour == 0 and 1 <= now.minute <= 5:
+    # Freitag → Dienstag-Poll (Donnerstags-Zusagen auswerten)
+    # Feuert ab 00:01; falls Bot da nicht lief, wird es im Laufe des Freitags nachgeholt
+    if now.weekday() == 4 and not (now.hour == 0 and now.minute == 0):
         if last_trigger_tuesday != today_str:
             spiel = get_tuesday_game()
             await post_poll(
                 channel,
-                f"🎮 Spielabend am Dienstag, 19:45\nSpiel: {spiel}",
+                f"🎮 Spielabend am Dienstag, 19:00\nSpiel: {spiel}",
                 next_tuesday_1945(),
                 day="donnerstag",
                 spiel="Freie Wahl"
@@ -1411,18 +1439,22 @@ async def scheduler():
                 state["last_code_posted_at"]   = None
                 save_state()
 
-    # Reminder
+    # Reminder — feuert sobald die Restzeit die Schwelle unterschreitet,
+    # zeigt aber die TATSÄCHLICHE Restzeit an (gerundet)
     if event_time:
         delta = event_time - now
+        minuten_uebrig = int(delta.total_seconds() // 60)
 
-        if not reminder_60_sent and timedelta(minutes=55) <= delta <= timedelta(minutes=65):
-            await send_reminder(channel, "🔔 Noch 1 Stunde bis zum Event!")
+        # 1-Stunden-Reminder: feuert wenn <= 60 Min übrig (und noch nicht gefeuert)
+        if not reminder_60_sent and 0 < delta.total_seconds() <= 60 * 60:
+            await send_reminder(channel, f"🔔 Noch {minuten_uebrig} Minuten bis zum Event!")
             reminder_60_sent          = True
             state["reminder_60_sent"] = True
             save_state()
 
-        if not reminder_15_sent and timedelta(minutes=10) <= delta <= timedelta(minutes=20):
-            await send_reminder(channel, "⚡ Noch 15 Minuten bis zum Event!")
+        # 15-Minuten-Reminder: feuert wenn <= 15 Min übrig (und noch nicht gefeuert)
+        if not reminder_15_sent and 0 < delta.total_seconds() <= 15 * 60:
+            await send_reminder(channel, f"⚡ Nur noch {minuten_uebrig} Minuten bis zum Event!")
             reminder_15_sent          = True
             state["reminder_15_sent"] = True
             save_state()
@@ -1438,7 +1470,7 @@ async def cmd_dienstag(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     dt    = next_tuesday_1945()
     spiel = get_tuesday_game()
-    await post_poll(interaction.channel, f"🎮 Spielabend am Dienstag, 19:45\nSpiel: {spiel}", dt)
+    await post_poll(interaction.channel, f"🎮 Spielabend am Dienstag, 19:00\nSpiel: {spiel}", dt)
     await interaction.followup.send(f"✅ Dienstag-Event erstellt für {dt.strftime('%d.%m. %H:%M')} Uhr", ephemeral=True)
 
 
@@ -1449,7 +1481,7 @@ async def cmd_donnerstag(interaction: discord.Interaction):
         return
     await interaction.response.defer(ephemeral=True)
     dt = next_thursday_1945()
-    await post_poll(interaction.channel, "🎲 Freier Spieleabend am Donnerstag, 19:45", dt)
+    await post_poll(interaction.channel, "🎲 Freier Spieleabend am Donnerstag, 19:00", dt)
     await interaction.followup.send(f"✅ Donnerstag-Event erstellt für {dt.strftime('%d.%m. %H:%M')} Uhr", ephemeral=True)
 
 
@@ -1631,7 +1663,7 @@ SERVERREGELN = """**1.** Nur Admins können Leute einladen. Bitte nur Leute einl
 
 **4.** Updates werden immer vorher abgesprochen. Bitte nicht einfach updaten ohne Absprache. Wer mit anderen Gruppen updated, bitte den alten Ordner behalten.
 
-**5.** Bitte möglichst pünktlich um **19:45 Uhr** am Spieltag im Sprachkanal sein. Falls ihr nicht reinkommt, kurz in der Quack-Ecke Bescheid geben wenn ihr später kommt.
+**5.** Bitte möglichst pünktlich um **19:00 Uhr** am Spieltag im Sprachkanal sein. Falls ihr nicht reinkommt, kurz in der Quack-Ecke Bescheid geben wenn ihr später kommt.
 
 **6.** Wenn jemand streamt, kurz Bescheid sagen wenn alle da sind — oder vorher in der Quack-Ecke. Normalerweise sind alle fein damit.
 
@@ -1867,6 +1899,129 @@ async def cmd_game(interaction: discord.Interaction, spiel: str, server: str, pa
             save_state()
 
     bot.loop.create_task(delete_server_later(msg))
+
+
+# ================= CODE =================
+
+# Bekannte Spiele mit Spezial-Infos (Server + Cover)
+BEKANNTE_SPIELE = {
+    "among us": {
+        "name": "🛸 Among Us",
+        "server": "Modded EU",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steam/apps/945360/header.jpg",
+        "color": discord.Color.red(),
+    },
+    "goose goose duck": {
+        "name": "🦆 Goose Goose Duck",
+        "server": "EU",
+        "icon": "https://cdn.cloudflare.steamstatic.com/steam/apps/1568590/header.jpg",
+        "color": discord.Color.yellow(),
+    },
+}
+
+
+async def code_spiel_autocomplete(interaction: discord.Interaction, current: str):
+    """Schlägt Spiele vor: Among Us, GGD + alle aus den Vorschlägen."""
+    choices = []
+    # Feste Favoriten zuerst
+    for fester in ("Among Us", "Goose Goose Duck"):
+        if current.lower() in fester.lower():
+            choices.append(discord.app_commands.Choice(name=fester, value=fester))
+    # Spiele aus den Vorschlägen
+    for d in state.get("vorschlaege", {}).values():
+        titel = d.get("title", "")
+        if titel and current.lower() in titel.lower():
+            if titel not in ("Among Us", "Goose Goose Duck"):
+                choices.append(discord.app_commands.Choice(name=titel, value=titel))
+    return choices[:25]  # Discord erlaubt max. 25
+
+
+@bot.tree.command(name="code", description="Postet einen Lobby-Code im codes-Channel")
+@discord.app_commands.describe(
+    code="Der Lobby-Code (z.B. ABCDEF)",
+    spiel="Für welches Spiel? Tippen und auswählen."
+)
+@discord.app_commands.autocomplete(spiel=code_spiel_autocomplete)
+async def cmd_code(interaction: discord.Interaction, code: str, spiel: str):
+    if interaction.channel_id != CODES_CHANNEL_ID:
+        await interaction.response.send_message(
+            "Dieser Befehl ist nur im codes-Channel erlaubt!",
+            ephemeral=True
+        )
+        return
+
+    code = code.strip().upper()
+    if not (4 <= len(code) <= 10):
+        await interaction.response.send_message(
+            "Der Code sieht ungewöhnlich aus (4–10 Zeichen erwartet). Bitte prüfen.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    # Spiel-Infos bestimmen
+    spiel_key = spiel.strip().lower()
+    if spiel_key in BEKANNTE_SPIELE:
+        info        = BEKANNTE_SPIELE[spiel_key]
+        spiel_name  = info["name"]
+        server_info = f"Server: **{info['server']}**"
+        spiel_icon  = info["icon"]
+        farbe       = info["color"]
+    else:
+        # Aus den Vorschlägen Bild holen, falls vorhanden
+        spiel_name  = spiel.strip()
+        server_info = None
+        spiel_icon  = ""
+        farbe       = discord.Color.blurple()
+        for d in state.get("vorschlaege", {}).values():
+            if d.get("title", "").lower() == spiel_key:
+                spiel_icon = d.get("image", "")
+                break
+
+    embed = discord.Embed(
+        title=f"{spiel_name} — Lobby Code",
+        description=f"```{code}```",
+        color=farbe
+    )
+    if server_info:
+        embed.add_field(name="📡 Server", value=server_info, inline=True)
+    embed.add_field(name="👤 Gepostet von", value=interaction.user.mention, inline=True)
+    if spiel_icon:
+        embed.set_image(url=spiel_icon)
+    embed.set_footer(text="Löscht sich in 3 Stunden automatisch.")
+
+    # Alle vorherigen codes-Posts löschen (Code, Codenames, Server)
+    for key in ("last_code_message_id", "last_codenames_message_id", "last_server_message_id"):
+        mid = state.get(key)
+        if mid:
+            try:
+                old_msg = await interaction.channel.fetch_message(mid)
+                await old_msg.delete()
+            except Exception:
+                pass
+            state[key] = None
+    save_state()
+
+    code_msg = await interaction.channel.send(embed=embed)
+    state["last_code_message_id"] = code_msg.id
+    state["last_code_posted_at"]  = datetime.now(berlin).isoformat()
+    save_state()
+
+    await interaction.followup.send("✅ Code gepostet!", ephemeral=True)
+
+    import asyncio as _asyncio
+    async def delete_code_later(m):
+        await _asyncio.sleep(3 * 60 * 60)
+        try:
+            await m.delete()
+        except Exception:
+            pass
+        if state.get("last_code_message_id") == m.id:
+            state["last_code_message_id"] = None
+            save_state()
+
+    bot.loop.create_task(delete_code_later(code_msg))
 
 
 # ================= MODDED =================
@@ -2407,22 +2562,21 @@ def grant_achievement(uid: str, key: str) -> bool:
     return False
 
 async def announce_achievement(channel, uid: int, key: str):
-    """Postet Achievement-Ankündigung."""
+    """Postet Achievement-Ankündigung dauerhaft im Achievement-Channel.
+    Nutzt Klartext-Namen statt Mentions — kein Ping."""
     if key not in ACHIEVEMENTS:
         return
+    ach_channel = bot.get_channel(ACHIEVEMENT_CHANNEL_ID) or channel
+    if not ach_channel:
+        return
     emoji, name, beschreibung = ACHIEVEMENTS[key]
+    user_name = await resolve_name(uid)
     embed = discord.Embed(
         title=f"{emoji} Achievement freigeschaltet!",
-        description=f"<@{uid}> hat **{name}** erreicht!\n_{beschreibung}_",
+        description=f"**{user_name}** hat **{name}** erreicht!\n_{beschreibung}_",
         color=discord.Color.gold()
     )
-    msg = await channel.send(embed=embed)
-    import asyncio as _a
-    async def del_ach(m):
-        await _a.sleep(300)
-        try: await m.delete()
-        except: pass
-    channel.guild and channel.guild.me and asyncio.get_event_loop().create_task(del_ach(msg))
+    await ach_channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
 async def check_achievements(uid: int, channel):
     """Prüft alle automatischen Achievements für einen User."""
@@ -2481,46 +2635,50 @@ async def cmd_achievement(interaction: discord.Interaction, mitglied: discord.Me
 
 # ================= START =================
 
-@bot.event
 async def on_ready():
-    global current_view
+    global current_view, reminder_60_sent, reminder_15_sent
     print(f"Bot online als {bot.user}")
+    now = datetime.now(berlin)
 
-    votes        = state.get("votes", {})
+    # ── 1. State-Keys sicherstellen ──────────────────────────────
+    defaults = {
+        "votes": {"yes": [], "maybe": [], "no": []},
+        "vorschlaege": {}, "highscores": {"dienstag": {}, "donnerstag": {}},
+        "streaks": {}, "archiv": [], "geburtstage": {},
+        "meilensteine_gefeiert": [], "achievements": {},
+        "verwarnungen": {}, "aktivitaet": {},
+        "reminder_msg_ids": [], "posted_news": [],
+        "last_code_message_id": None, "last_codenames_message_id": None,
+        "last_server_message_id": None, "hs_message_id": None,
+        "reminder_60_sent": False, "reminder_15_sent": False,
+    }
+    for k, v in defaults.items():
+        if k not in state:
+            state[k] = v
+    save_state()
+
+    # ── 1b. Member-Cache aufbauen ────────────────────────────────
+    guild = bot.get_guild(GUILD_ID)
+    if guild:
+        try:
+            await guild.chunk()
+            print(f"Member-Cache: {guild.member_count} Mitglieder geladen.")
+        except Exception as e:
+            print(f"Member-Cache Fehler: {e}")
+
+    # ── 2. Views registrieren ─────────────────────────────────────
+    votes = state.get("votes", {})
     current_view = EventView(
-        yes=votes.get("yes",   []),
+        yes=votes.get("yes", []),
         maybe=votes.get("maybe", []),
-        no=votes.get("no",    []),
+        no=votes.get("no", []),
     )
     bot.add_view(current_view)
-
     for app_id in state.get("vorschlaege", {}):
         bot.add_view(make_vorschlag_view(app_id))
+    print(f"{len(state.get('vorschlaege', {}))} Spielvorschlag-Views registriert.")
 
-    scheduler.start()
-    steam_news_checker.start()
-
-    # Verpasste Reminder nachholen
-    global reminder_60_sent, reminder_15_sent
-    if event_time and current_view:
-        now_check = datetime.now(berlin)
-        delta = event_time - now_check
-        channel = bot.get_channel(CHANNEL_ID)
-        if channel:
-            # 1-Stunden-Reminder verpasst?
-            if not reminder_60_sent and delta <= timedelta(minutes=55):
-                await send_reminder(channel, "🔔 Noch 1 Stunde bis zum Event! (nachgeholt)")
-                reminder_60_sent = True
-                state["reminder_60_sent"] = True
-                save_state()
-            # 15-Minuten-Reminder verpasst?
-            if not reminder_15_sent and delta <= timedelta(minutes=10):
-                await send_reminder(channel, "⚡ Noch 15 Minuten bis zum Event! (nachgeholt)")
-                reminder_15_sent = True
-                state["reminder_15_sent"] = True
-                save_state()
-
-    # Beim Start: alte codes-Channel Posts löschen wenn älter als 3 Stunden
+    # ── 3. Alte codes-Channel Posts löschen wenn >3h ──────────────
     codes_channel = bot.get_channel(CODES_CHANNEL_ID)
     if codes_channel:
         for key, ts_key in [
@@ -2530,49 +2688,113 @@ async def on_ready():
         ]:
             mid = state.get(key)
             ts  = state.get(ts_key)
-            if mid and ts:
-                posted_at = datetime.fromisoformat(ts).astimezone(berlin)
-                alter = (datetime.now(berlin) - posted_at).total_seconds()
-                if alter > 3 * 3600:
+            if mid:
+                soll_loeschen = False
+                if ts:
+                    alter = (now - datetime.fromisoformat(ts).astimezone(berlin)).total_seconds()
+                    soll_loeschen = alter > 3 * 3600
+                else:
+                    soll_loeschen = True  # Kein Timestamp → sicher löschen
+                if soll_loeschen:
                     try:
                         old_msg = await codes_channel.fetch_message(mid)
                         await old_msg.delete()
                     except Exception:
                         pass
-                    state[key]    = None
-                    state[ts_key] = None
-        save_state()
-    print(f"Scheduler gestartet. {len(state.get('vorschlaege', {}))} Spielvorschlag-Views registriert.")
-
-    # Lösch-Tasks für noch ausstehende codes-Channel Posts neu starten
-    import asyncio as _asyncio
-
-    async def delayed_delete(channel_id, msg_id, state_key, delay=10800):
-        channel = bot.get_channel(channel_id)
-        if not channel:
-            return
-        await _asyncio.sleep(delay)
-        try:
-            msg = await channel.fetch_message(msg_id)
-            await msg.delete()
-        except Exception:
-            pass
-        state[state_key] = None
-        save_state()
-
-    for key in ("last_code_message_id", "last_codenames_message_id", "last_server_message_id"):
-        mid = state.get(key)
-        if mid:
-            # Sofort löschen da wir nicht wissen wie alt es ist
-            channel = bot.get_channel(CODES_CHANNEL_ID)
-            if channel:
-                try:
-                    msg = await channel.fetch_message(mid)
-                    await msg.delete()
                     state[key] = None
-                    save_state()
+                    if ts_key in state:
+                        state[ts_key] = None
+        save_state()
+
+    # ── 4. Alte Poll-Nachrichten prüfen ───────────────────────────
+    poll_channel = bot.get_channel(CHANNEL_ID)
+    if poll_channel and state.get("last_poll_message_id"):
+        try:
+            await poll_channel.fetch_message(state["last_poll_message_id"])
+        except Exception:
+            # Nachricht existiert nicht mehr → State bereinigen
+            state["last_poll_message_id"] = None
+            save_state()
+
+    # ── 5. Abgelaufenen Poll aufräumen ──────────────────────────
+    # (Verpasste Reminder holt der Scheduler automatisch nach — mit echter Restzeit)
+    if event_time and poll_channel:
+        delta = event_time - now
+        if delta < timedelta(0) and state.get("last_poll_message_id"):
+            try:
+                old = await poll_channel.fetch_message(state["last_poll_message_id"])
+                await old.delete()
+            except Exception:
+                pass
+            state["last_poll_message_id"] = None
+            state["event_time"] = None
+            save_state()
+
+    # ── 5b. Terminzusagen-Channel aufräumen ─────────────────────
+    # Alles von Ventington löschen was NICHT der aktuelle Poll ist.
+    # So bleibt der Channel immer nur mit dem einen aktiven Poll bestückt.
+    if poll_channel:
+        keep_id = state.get("last_poll_message_id")
+        try:
+            async for msg in poll_channel.history(limit=200):
+                if msg.author.id != bot.user.id:
+                    continue
+                if keep_id and msg.id == keep_id:
+                    continue
+                try:
+                    await msg.delete()
                 except Exception:
                     pass
+        except Exception as e:
+            print(f"Poll-Channel Aufräumen fehlgeschlagen: {e}")
+
+    # ── 6. Einmalige Achievement-Migration ───────────────────────
+    if not state.get("achievements_migriert"):
+        ach_channel = bot.get_channel(ACHIEVEMENT_CHANNEL_ID)
+        term_channel = bot.get_channel(CHANNEL_ID)
+
+        # a) Alte Achievement-Posts im terminzusagen-Channel löschen
+        if term_channel:
+            try:
+                async for alt in term_channel.history(limit=200):
+                    if alt.author.id == bot.user.id and alt.embeds:
+                        titel = alt.embeds[0].title or ""
+                        if "Achievement freigeschaltet" in titel:
+                            try:
+                                await alt.delete()
+                            except Exception:
+                                pass
+            except Exception as e:
+                print(f"Migration (alte löschen) Fehler: {e}")
+
+        # b) Alle bestehenden Achievements neu im achievements-Channel posten
+        if ach_channel:
+            for uid_str, keys in state.get("achievements", {}).items():
+                for key in keys:
+                    if key in ACHIEVEMENTS:
+                        emoji, name, beschreibung = ACHIEVEMENTS[key]
+                        user_name = await resolve_name(uid_str)
+                        embed = discord.Embed(
+                            title=f"{emoji} Achievement freigeschaltet!",
+                            description=f"**{user_name}** hat **{name}** erreicht!\n_{beschreibung}_",
+                            color=discord.Color.gold()
+                        )
+                        try:
+                            await ach_channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+                        except Exception:
+                            pass
+
+        state["achievements_migriert"] = True
+        save_state()
+        print("Achievement-Migration abgeschlossen.")
+
+    # ── 7. Scheduler starten ──────────────────────────────────────
+    if not scheduler.is_running():
+        scheduler.start()
+    if not steam_news_checker.is_running():
+        steam_news_checker.start()
+
+    print(f"Ventington bereit. {now.strftime('%d.%m.%Y %H:%M')} Uhr")
 
 
 bot.run(TOKEN)
