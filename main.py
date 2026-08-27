@@ -275,6 +275,7 @@ if "posted_news" not in state: state["posted_news"] = []  # Liste von bereits ge
 if "verwarnungen" not in state: state["verwarnungen"] = {}
 if "geburtstage" not in state: state["geburtstage"] = {}  # uid -> "DD.MM"
 if "meilensteine_gefeiert" not in state: state["meilensteine_gefeiert"] = []
+if "last_evaluated_poll_id" not in state: state["last_evaluated_poll_id"] = None
 if "achievements" not in state: state["achievements"] = {}  # uid -> [liste von achievement keys]  # uid -> {"count": int, "timestamp": str}
 if "archiv"         not in state: state["archiv"]         = []
 if "monatsbericht_msg_id" not in state: state["monatsbericht_msg_id"] = None
@@ -1183,38 +1184,69 @@ async def post_monatsbericht():
 
 # ================= EVENT POST =================
 
+async def evaluate_expired_event(channel, day: str = None, spiel: str = None):
+    """Wertet ein abgelaufenes Event aus: Archiv, Highscore, Streaks, Achievements.
+    Idempotent: kann mehrfach aufgerufen werden, ohne Schaden anzurichten,
+    weil ein Marker im state gesetzt wird."""
+    if not current_view:
+        return
+
+    # Doppelte Auswertung verhindern
+    poll_id = state.get("last_poll_message_id")
+    if not poll_id:
+        return
+    if state.get("last_evaluated_poll_id") == poll_id:
+        return  # Wurde schon ausgewertet
+
+    yes_uids = current_view.yes
+    ev_time = event_time
+    if not ev_time:
+        ev_time_iso = state.get("event_time")
+        if ev_time_iso:
+            try:
+                ev_time = datetime.fromisoformat(ev_time_iso).astimezone(berlin)
+            except Exception:
+                pass
+
+    # Falls day nicht übergeben, aus Wochentag ableiten
+    if not day and ev_time:
+        day = "dienstag" if ev_time.weekday() == 1 else "donnerstag"
+
+    # Archiv-Eintrag nur wenn jemand dabei war
+    if ev_time and yes_uids and day:
+        await post_archiv_entry(day, ev_time, yes_uids, spiel)
+
+    # Highscore + Streaks
+    all_known = yes_uids | current_view.maybe | current_view.no
+    if yes_uids and day:
+        record_yes_votes(day, yes_uids)
+        meilensteine = update_streaks(yes_uids, all_known)
+        await update_highscore_post()
+        for uid in yes_uids:
+            await check_achievements(uid, channel)
+
+        ach_channel = bot.get_channel(ACHIEVEMENT_CHANNEL_ID) or channel
+        for uid, gesamt in meilensteine:
+            user_name = await resolve_name(uid)
+            await ach_channel.send(
+                f"🎉 **{user_name}** hat soeben die **{gesamt}. Zusage** erreicht! Absolute Legende! 🏅",
+                allowed_mentions=discord.AllowedMentions.none()
+            )
+    elif day:
+        update_streaks(set(), all_known)
+
+    # Marker setzen — dieser Poll ist ausgewertet
+    state["last_evaluated_poll_id"] = poll_id
+    save_state()
+
+
 async def post_poll(channel, text, event_dt, day: str = None, spiel: str = None):
     global last_poll_message_id, event_time, current_view, current_event_day
     global reminder_60_sent, reminder_15_sent, reminder_msg_ids
 
-    # Abgelaufenes Event auswerten
-    if day and current_view:
-        yes_uids = current_view.yes
-
-        # Archiv-Eintrag nur wenn jemand dabei war
-        if event_time and yes_uids:
-            await post_archiv_entry(day, event_time, yes_uids, spiel)
-
-        # Highscore + Streaks
-        all_known = yes_uids | current_view.maybe | current_view.no
-        if yes_uids:
-            record_yes_votes(day, yes_uids)
-            meilensteine = update_streaks(yes_uids, all_known)
-            await update_highscore_post()
-            # Achievements prüfen
-            for uid in yes_uids:
-                await check_achievements(uid, channel)
-
-            # Glückwunschnachrichten für Meilensteine — im Achievement-Channel
-            ach_channel = bot.get_channel(ACHIEVEMENT_CHANNEL_ID) or channel
-            for uid, gesamt in meilensteine:
-                user_name = await resolve_name(uid)
-                await ach_channel.send(
-                    f"🎉 **{user_name}** hat soeben die **{gesamt}. Zusage** erreicht! Absolute Legende! 🏅",
-                    allowed_mentions=discord.AllowedMentions.none()
-                )
-        else:
-            update_streaks(set(), all_known)
+    # Abgelaufenes Event auswerten (idempotent)
+    if day:
+        await evaluate_expired_event(channel, day=day, spiel=spiel)
 
     # Altes Poll + Reminder löschen
     ids_to_delete = []
@@ -1321,13 +1353,28 @@ def get_tuesday_game():
 
 @tasks.loop(minutes=1)
 async def scheduler():
-    global reminder_60_sent, reminder_15_sent
+    global reminder_60_sent, reminder_15_sent, event_time
     global last_trigger_tuesday, last_trigger_thursday
 
     now     = datetime.now(berlin)
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
         return
+
+    # Sicherheitsgurt: event_time immer frisch aus state laden,
+    # falls die globale Variable nicht synchronisiert wurde (z.B. nach Neustart)
+    state_event_time_iso = state.get("event_time")
+    if state_event_time_iso:
+        try:
+            event_time = datetime.fromisoformat(state_event_time_iso).astimezone(berlin)
+        except Exception:
+            pass
+    elif event_time is not None and not state.get("event_time"):
+        event_time = None
+
+    # Reminder-Flags auch aus state neu laden (falls extern manipuliert oder frisch geladen)
+    reminder_60_sent = state.get("reminder_60_sent", False)
+    reminder_15_sent = state.get("reminder_15_sent", False)
 
     today_str = now.date().isoformat()
 
@@ -1416,28 +1463,48 @@ async def scheduler():
     if now.day == 1 and now.hour == 8 and now.minute == 0:
         bot.loop.create_task(post_monatsbericht())
 
-    # Automatische Lobby-Rotation: Code löschen wenn älter als 1h und niemand im Voice
-    code_mid = state.get("last_code_message_id")
-    code_ts  = state.get("last_code_posted_at")
-    if code_mid and code_ts:
-        alter = (datetime.now(berlin) - datetime.fromisoformat(code_ts).astimezone(berlin)).total_seconds()
-        if alter > 3600:
+    # Codes-Channel Aufräumen: Codes, Codenames-Links und Server-Posts
+    # löschen wenn > 3h alt (absolute Grenze, unabhängig von Voice-Status).
+    # Zusätzlich: Codes rotieren nach 1h wenn niemand mehr im Voice.
+    now_ts = datetime.now(berlin)
+    codes_ch = bot.get_channel(CODES_CHANNEL_ID)
+
+    for mid_key, ts_key in [
+        ("last_code_message_id",       "last_code_posted_at"),
+        ("last_codenames_message_id",  "last_codenames_posted_at"),
+        ("last_server_message_id",     "last_server_posted_at"),
+    ]:
+        mid = state.get(mid_key)
+        ts  = state.get(ts_key)
+        if not (mid and ts):
+            continue
+
+        alter = (now_ts - datetime.fromisoformat(ts).astimezone(berlin)).total_seconds()
+        soll_loeschen = False
+
+        # Absolute 3-Stunden-Grenze
+        if alter > 3 * 3600:
+            soll_loeschen = True
+
+        # Nur für Codes: nach 1h löschen wenn niemand im Voice
+        elif mid_key == "last_code_message_id" and alter > 3600:
             niemand_im_voice = all(
                 len(bot.get_channel(vc_id).members) == 0
                 for vc_id in VOICE_CHANNEL_IDS
                 if bot.get_channel(vc_id)
             )
             if niemand_im_voice:
-                codes_ch = bot.get_channel(CODES_CHANNEL_ID)
-                if codes_ch:
-                    try:
-                        old = await codes_ch.fetch_message(code_mid)
-                        await old.delete()
-                    except Exception:
-                        pass
-                state["last_code_message_id"]  = None
-                state["last_code_posted_at"]   = None
-                save_state()
+                soll_loeschen = True
+
+        if soll_loeschen and codes_ch:
+            try:
+                old_msg = await codes_ch.fetch_message(mid)
+                await old_msg.delete()
+            except Exception:
+                pass
+            state[mid_key] = None
+            state[ts_key]  = None
+            save_state()
 
     # Reminder — feuert sobald die Restzeit die Schwelle unterschreitet,
     # zeigt aber die TATSÄCHLICHE Restzeit an (gerundet)
@@ -2725,11 +2792,21 @@ async def on_ready():
             state["last_poll_message_id"] = None
             save_state()
 
-    # ── 5. Abgelaufenen Poll aufräumen ──────────────────────────
-    # (Verpasste Reminder holt der Scheduler automatisch nach — mit echter Restzeit)
+    # ── 5. Abgelaufenen Poll auswerten und aufräumen ────────────
+    # WICHTIG: Erst auswerten (Highscore/Streaks/Archiv/Achievements),
+    # DANN löschen. Sonst gehen die Zusagen verloren.
     if event_time and poll_channel:
         delta = event_time - now
         if delta < timedelta(0) and state.get("last_poll_message_id"):
+            # Auswertung (nur wenn noch nicht geschehen)
+            try:
+                # day aus Wochentag ableiten
+                day = "dienstag" if event_time.weekday() == 1 else "donnerstag"
+                await evaluate_expired_event(poll_channel, day=day)
+            except Exception as e:
+                print(f"Auswertung beim Start fehlgeschlagen: {e}")
+
+            # Erst NACH erfolgreicher Auswertung löschen
             try:
                 old = await poll_channel.fetch_message(state["last_poll_message_id"])
                 await old.delete()
