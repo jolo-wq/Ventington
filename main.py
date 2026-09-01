@@ -1342,9 +1342,15 @@ def next_tuesday_1945():  return next_weekday(1)
 def next_thursday_1945(): return next_weekday(3)
 
 def get_tuesday_game():
+    """Gibt das Spiel für den NÄCHSTEN Dienstag zurück
+    (nicht für den aktuellen Wochentag)."""
     start = berlin.localize(datetime(2025, 4, 1))
     now   = datetime.now(berlin)
-    weeks = max((now - start).days, 0) // 7
+    # Finde den nächsten Dienstag ab jetzt
+    dt = now
+    while dt.weekday() != 1:  # 1 = Dienstag
+        dt += timedelta(days=1)
+    weeks = max((dt - start).days, 0) // 7
     games = ["🛸 Among Us", "🛸 Among Us", "🦆 Goose Goose Duck", "🦆 Goose Goose Duck"]
     return games[weeks % len(games)]
 
