@@ -899,7 +899,11 @@ async def get_advice() -> str:
 
 # ================= ON MESSAGE =================
 
-async def handle_violation_standalone(msg, channel_name="diesem Channel"):
+async def _verwarnung_registrieren(msg) -> int:
+    """Gemeinsame Verwarnungs-Logik: zählt einen Verstoß für den Autor
+    (Reset nach 7 Tagen ohne neuen Verstoß), löscht die Nachricht und gibt
+    den neuen Verstoß-Zähler zurück. Wird von allen Kanal-spezifischen
+    Verstoß-Handlern genutzt, damit die Zähl-/Lösch-Logik nur einmal existiert."""
     uid = str(msg.author.id)
     now_ts = datetime.now(berlin)
     entry = state["verwarnungen"].get(uid, {"count": 0, "timestamp": None})
@@ -919,7 +923,11 @@ async def handle_violation_standalone(msg, channel_name="diesem Channel"):
     except Exception:
         pass
 
-    count = entry["count"]
+    return entry["count"]
+
+
+async def handle_violation_standalone(msg, channel_name="diesem Channel"):
+    count = await _verwarnung_registrieren(msg)
     if count == 1:
         hinweis = f"⚠️ Slash-Commands sind in **#{channel_name}** nicht erlaubt!"
     elif count == 2:
@@ -931,6 +939,25 @@ async def handle_violation_standalone(msg, channel_name="diesem Channel"):
 
     try:
         await msg.author.send(hinweis)
+    except Exception:
+        pass
+
+
+async def handle_violation_codes(msg):
+    """Wie handle_violation_standalone, aber mit dem codes-Channel-spezifischen
+    Wortlaut (kein Slash-Command-Verstoß, sondern unerlaubter Inhalt)."""
+    count = await _verwarnung_registrieren(msg)
+    if count == 1:
+        hinweis = "⚠️ Hier sind nur erlaubte Inhalte gestattet! Bitte lies den Kanal-Disclaimer."
+    elif count == 2:
+        hinweis = "⚠️ 2. Verstoß! Bitte halte dich an die Kanalregeln."
+    elif count == 3:
+        hinweis = "🚫 3. Verstoß! Das ist deine letzte Warnung."
+    else:
+        hinweis = "🚫 Wiederholter Verstoß! Ein Admin wurde informiert."
+
+    try:
+        await msg.author.send(f"**codes:** {hinweis}")
     except Exception:
         pass
 
@@ -1032,43 +1059,6 @@ async def on_message(message: discord.Message):
                 pass
             await handle_violation_standalone(message, "spielvorschlaege")
     if message.channel.id == CODES_CHANNEL_ID:
-        # Hilfsfunktion: Verwarnung / Timeout
-        async def handle_violation(msg, channel_name="diesem Channel"):
-            uid = str(msg.author.id)
-            now_ts = datetime.now(berlin)
-            entry = state["verwarnungen"].get(uid, {"count": 0, "timestamp": None})
-
-            # Reset nach 7 Tagen
-            if entry["timestamp"]:
-                last = datetime.fromisoformat(entry["timestamp"]).astimezone(berlin)
-                if (now_ts - last).total_seconds() > 7 * 24 * 3600:
-                    entry = {"count": 0, "timestamp": None}
-
-            entry["count"] += 1
-            entry["timestamp"] = now_ts.isoformat()
-            state["verwarnungen"][uid] = entry
-            save_state()
-
-            try:
-                await msg.delete()
-            except Exception:
-                pass
-
-            count = entry["count"]
-            if count == 1:
-                hinweis = "⚠️ Hier sind nur erlaubte Inhalte gestattet! Bitte lies den Kanal-Disclaimer."
-            elif count == 2:
-                hinweis = "⚠️ 2. Verstoß! Bitte halte dich an die Kanalregeln."
-            elif count == 3:
-                hinweis = "🚫 3. Verstoß! Das ist deine letzte Warnung."
-            else:
-                hinweis = "🚫 Wiederholter Verstoß! Ein Admin wurde informiert."
-
-            try:
-                await msg.author.send(f"**{channel_name}:** {hinweis}")
-            except Exception:
-                pass
-
         # Alle vorherigen Posts im codes-Channel loeschen
         async def clear_codes_channel():
             for key in ("last_code_message_id", "last_codenames_message_id", "last_server_message_id"):
@@ -1111,7 +1101,7 @@ async def on_message(message: discord.Message):
             return
 
         # Codes werden nur noch über /code gepostet — alles andere ist ein Verstoß
-        await handle_violation(message, "codes")
+        await handle_violation_codes(message)
 
     # Ventington Chat Channel
     if message.channel.id in VENTINGTON_CHANNELS:
@@ -1661,7 +1651,11 @@ async def scheduler():
     if not state.get("event_time"):
         # Donnerstag-Poll nachholen: es ist bereits Donnerstag, aber vor 19:00
         if now.weekday() == 3 and now.hour < 19 and last_trigger_thursday != today_str:
-            spiel = get_tuesday_game()
+            # Für die Archivierung brauchen wir das Spiel des GERADE ABGELAUFENEN
+            # Dienstags — get_tuesday_game() gibt aber das des NÄCHSTEN Dienstags
+            # zurück (Rotation kann dazwischen wechseln!). Deshalb hier explizit
+            # für das tatsächliche Event-Datum berechnen.
+            spiel = get_tuesday_game_for_date(event_time) if event_time else get_tuesday_game()
             await post_poll(
                 channel,
                 "🎲 Freier Spieleabend am Donnerstag, 19:00",
@@ -1704,7 +1698,9 @@ async def scheduler():
     # Feuert ab 00:01; falls Bot da nicht lief, wird es im Laufe des Mittwochs nachgeholt
     if now.weekday() == 2 and not (now.hour == 0 and now.minute == 0) and not _event_laeuft:
         if last_trigger_thursday != today_str:
-            spiel = get_tuesday_game()
+            # Wie oben: Spiel für das tatsächliche (abgelaufene) Event-Datum
+            # berechnen, nicht für "den nächsten Dienstag ab jetzt".
+            spiel = get_tuesday_game_for_date(event_time) if event_time else get_tuesday_game()
             await post_poll(
                 channel,
                 "🎲 Freier Spieleabend am Donnerstag, 19:00",
@@ -2071,6 +2067,19 @@ async def scheduler():
                             save_state()
                         except Exception as e:
                             print(f"Nightflame-DM fehlgeschlagen: {e}")
+
+
+@scheduler.error
+async def scheduler_error(error: Exception):
+    """KRITISCH: tasks.loop beendet die Schleife bei einer unbehandelten
+    Exception standardmäßig für immer. scheduler() steuert aber Reminder,
+    Polls, Backups, Geburtstage, Heatmaps und Cleanup — ohne diesen Handler
+    würde ein einziger unerwarteter Fehler die komplette Zeitsteuerung
+    lautlos abschalten, bis jemand den Bot manuell neu startet."""
+    print(f"Fehler im scheduler(): {error!r}")
+    import traceback
+    traceback.print_exception(type(error), error, error.__traceback__)
+    scheduler.restart()
 
 
 # ================= SLASH COMMANDS =================
@@ -2734,6 +2743,17 @@ async def steam_news_checker():
 
     state["posted_news"] = posted[-200:]  # Max 200 IDs behalten
     save_state()
+
+
+@steam_news_checker.error
+async def steam_news_checker_error(error: Exception):
+    """Ohne diesen Handler würde tasks.loop bei einer unbehandelten Exception
+    die Schleife für immer beenden — die News-Prüfung liefe dann bis zum
+    nächsten Bot-Neustart nicht mehr, ohne dass irgendwo eine Meldung kommt."""
+    print(f"Fehler im steam_news_checker: {error!r}")
+    import traceback
+    traceback.print_exception(type(error), error, error.__traceback__)
+    steam_news_checker.restart()
 
 
 # ================= RANDOM =================
