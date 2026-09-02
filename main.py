@@ -1412,16 +1412,15 @@ async def post_monatsbericht():
 
     msg = await channel.send(embed=embed)
     state["monatsbericht_msg_id"] = msg.id
+    # Neustart-fest löschen lassen (24h sind ein langes Fenster — ein
+    # sleep_until im laufenden Prozess würde jeden Neustart in der
+    # Zwischenzeit nicht überleben, siehe news_delete_queue-Kommentar dort).
+    state.setdefault("news_delete_queue", []).append({
+        "msg_id": msg.id,
+        "channel_id": channel.id,
+        "delete_at": (datetime.now(berlin) + timedelta(hours=24)).isoformat(),
+    })
     save_state()
-
-    # Nach 24h löschen
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(hours=24))
-    try:
-        await msg.delete()
-        state["monatsbericht_msg_id"] = None
-        save_state()
-    except Exception:
-        pass
 
 
 # ================= EVENT POST =================
@@ -1791,7 +1790,11 @@ async def scheduler():
         save_state()
         bot.loop.create_task(post_monatsbericht())
 
-    # Alte Steam-News löschen deren Zeit abgelaufen ist (Queue-basiert, neustart-fest)
+    # Zeitverzögerte Nachrichten-Löschungen abarbeiten (Queue-basiert, neustart-fest).
+    # Trotz des Namens nicht nur für Steam-News: /commands, /rollen, /regeln,
+    # /modded, /kalender, /maps und der Monatsbericht nutzen dieselbe Queue,
+    # statt jeweils ein eigenes sleep_until() im laufenden Prozess laufen zu
+    # lassen — das würde jeden Neustart in der Zwischenzeit nicht überleben.
     news_queue = state.get("news_delete_queue", [])
     if news_queue:
         neue_queue = []
@@ -2267,12 +2270,12 @@ async def cmd_rollen(interaction: discord.Interaction, spiel: str):
 
     await interaction.followup.send("✅ Rollen gepostet!", ephemeral=True)
 
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=2))
+    delete_at = (datetime.now(berlin) + timedelta(minutes=2)).isoformat()
     for msg in msgs:
-        try:
-            await msg.delete()
-        except Exception:
-            pass
+        state.setdefault("news_delete_queue", []).append({
+            "msg_id": msg.id, "channel_id": msg.channel.id, "delete_at": delete_at,
+        })
+    save_state()
 
 
 # ================= REGELN =================
@@ -2329,12 +2332,12 @@ async def cmd_regeln(interaction: discord.Interaction):
 
     await interaction.followup.send("✅ Regeln gepostet!", ephemeral=True)
 
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=2))
+    delete_at = (datetime.now(berlin) + timedelta(minutes=2)).isoformat()
     for msg in (msg1, msg2):
-        try:
-            await msg.delete()
-        except Exception:
-            pass
+        state.setdefault("news_delete_queue", []).append({
+            "msg_id": msg.id, "channel_id": msg.channel.id, "delete_at": delete_at,
+        })
+    save_state()
 
 
 # ================= BEGRÜSSUNG =================
@@ -2450,11 +2453,16 @@ async def cmd_commands(interaction: discord.Interaction):
     msg = await interaction.channel.send(embed=embed)
     await interaction.response.send_message("Commands gepostet!", ephemeral=True)
 
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(seconds=60))
-    try:
-        await msg.delete()
-    except Exception:
-        pass
+    # Neustart-fest löschen lassen (statt sleep_until im laufenden Prozess —
+    # der würde bei einem Neustart in den 60s einfach sterben und die
+    # Nachricht bliebe für immer stehen). news_delete_queue wird generisch
+    # vom Scheduler abgearbeitet, nicht nur für Steam-News.
+    state.setdefault("news_delete_queue", []).append({
+        "msg_id": msg.id,
+        "channel_id": msg.channel.id,
+        "delete_at": (datetime.now(berlin) + timedelta(seconds=60)).isoformat(),
+    })
+    save_state()
 
 
 # ================= SERVER COMMAND =================
@@ -2659,12 +2667,12 @@ async def cmd_modded(interaction: discord.Interaction):
     msg_nach = await interaction.channel.send("☝️ Einfach auf den Link klicken — die Datei liegt direkt hier im Server!")
     await interaction.response.send_message("Gepostet!", ephemeral=True)
 
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=1))
+    delete_at = (datetime.now(berlin) + timedelta(minutes=1)).isoformat()
     for m in (msg_vor, msg, msg_nach):
-        try:
-            await m.delete()
-        except Exception:
-            pass
+        state.setdefault("news_delete_queue", []).append({
+            "msg_id": m.id, "channel_id": m.channel.id, "delete_at": delete_at,
+        })
+    save_state()
 
 
 # ================= STEAM NEWS =================
@@ -2892,11 +2900,11 @@ async def cmd_kalender(interaction: discord.Interaction):
     embed.set_footer(text="🟦 Dienstag  |  🟧 Donnerstag  •  Loescht sich in 5 Minuten")
 
     msg = await interaction.followup.send(embed=embed)
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(minutes=5))
-    try:
-        await msg.delete()
-    except Exception:
-        pass
+    state.setdefault("news_delete_queue", []).append({
+        "msg_id": msg.id, "channel_id": msg.channel.id,
+        "delete_at": (datetime.now(berlin) + timedelta(minutes=5)).isoformat(),
+    })
+    save_state()
 
 
 # ================= PROFILE =================
@@ -3059,11 +3067,11 @@ async def cmd_maps(interaction: discord.Interaction, spiel: str):
     msg = await interaction.channel.send(embed=embed)
     await interaction.followup.send("Maps gepostet!", ephemeral=True)
 
-    await discord.utils.sleep_until(datetime.now(berlin) + timedelta(hours=1))
-    try:
-        await msg.delete()
-    except Exception:
-        pass
+    state.setdefault("news_delete_queue", []).append({
+        "msg_id": msg.id, "channel_id": msg.channel.id,
+        "delete_at": (datetime.now(berlin) + timedelta(hours=1)).isoformat(),
+    })
+    save_state()
 
 
 # ================= GEBURTSTAG =================
