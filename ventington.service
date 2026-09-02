@@ -13,6 +13,11 @@ EnvironmentFile=/home/pi/Ventington/.env
 # venv zuerst, aber die System-Pfade MUESSEN drin bleiben — sonst findet
 # /update und /status kein 'git' (FileNotFoundError: 'git')
 Environment="PATH=/home/pi/Ventington/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# Ohne das hier puffert Python stdout blockweise (kein Terminal angehängt) —
+# print()-Meldungen (Startup, Scheduler-Fehler, ...) landen dann erst
+# Minuten später oder gar nicht in journalctl. Erst mit dieser Variable
+# erscheinen sie sofort im Log.
+Environment="PYTHONUNBUFFERED=1"
 ExecStart=/home/pi/Ventington/venv/bin/python main.py
 Restart=always
 RestartSec=5
