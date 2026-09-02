@@ -2553,7 +2553,7 @@ async def code_spiel_autocomplete(interaction: discord.Interaction, current: str
     else:
         aktuell, anderes = "Goose Goose Duck", "Among Us"
 
-    for label, wert in ((f"🔥 {aktuell} (diese Woche)", aktuell), (anderes, anderes)):
+    for label, wert in ((f"🔥 {aktuell} (als nächstes dran)", aktuell), (anderes, anderes)):
         if current.lower() in wert.lower():
             choices.append(discord.app_commands.Choice(name=label, value=wert))
 
