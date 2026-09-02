@@ -4471,6 +4471,7 @@ async def cmd_achievement(interaction: discord.Interaction, mitglied: discord.Me
 
 # ================= START =================
 
+@bot.event
 async def on_ready():
     global current_view, reminder_60_sent, reminder_15_sent
     print(f"Bot online als {bot.user}")
