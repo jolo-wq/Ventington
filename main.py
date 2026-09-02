@@ -14,6 +14,9 @@ from google import genai as google_genai
 import subprocess
 import sys
 import asyncio
+import sqlite3
+import aiosqlite
+import io
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
@@ -161,7 +164,8 @@ ROLE_ARCHITEKT  = 1081539714659651625 # Architekt
 ROLE_CREWMATE   = 802623619132948530  # Standard-Rolle für neue Mitglieder
 ADMIN_ROLLEN    = {ROLE_ADMIN, ROLE_SEELSORGER, ROLE_SHERIFF, ROLE_ARCHITEKT}
 POLL_ROLLEN     = {ROLE_ADMIN, ROLE_SEELSORGER}  # Nur diese dürfen /dienstag und /donnerstag
-STATE_FILE           = "state.json"
+STATE_DB_FILE   = "state.db"     # SQLite statt JSON — schont die SD-Karte des Pi
+LEGACY_STATE_FILE = "state.json"  # nur für die einmalige Migration alter Backups
 
 berlin = pytz.timezone("Europe/Berlin")
 
@@ -186,25 +190,104 @@ SCHMAEHUNGEN = [
 MEILENSTEINE = [10, 25, 50, 100, 200]
 
 
-# ================= STATE PERSISTENCE =================
+# ================= STATE PERSISTENCE (SQLite, asynchron) =================
+#
+# Der State lebt weiterhin als ein einziges Dict im RAM (siehe unten) — das
+# bleibt unverändert, damit der gesamte restliche Code (state["..."]) genau
+# so weiterfunktioniert. Nur die Art wie er auf die Platte kommt ändert sich:
+# statt bei jedem save_state() die komplette state.json neu zu schreiben
+# (teuer für die SD-Karte eines Raspberry Pi), landet der State jetzt in
+# einer SQLite-Datenbank. Während der Bot läuft, geschieht das Schreiben
+# über aiosqlite in einem eigenen Hintergrund-Task und blockiert damit nie
+# den Event-Loop — Aufrufer müssen save_state() dafür nicht awaiten.
+
+def _sqlite_write_sync(payload: str):
+    """Blockierender Low-Level-Schreibzugriff. Wird nur verwendet, wenn
+    (noch) kein Event-Loop läuft — z.B. beim allerersten Start."""
+    conn = sqlite3.connect(STATE_DB_FILE)
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute(
+            "INSERT INTO kv_store (key, value) VALUES ('state', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (payload,)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
 
 def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    """Lädt den State synchron beim Programmstart (vor dem Event-Loop) aus
+    state.db. Existiert noch eine alte state.json (Umstieg von JSON auf
+    SQLite), wird sie einmalig übernommen und danach ignoriert."""
+    conn = sqlite3.connect(STATE_DB_FILE)
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)")
+        row = conn.execute("SELECT value FROM kv_store WHERE key = 'state'").fetchone()
+        if row:
+            return json.loads(row[0])
+
+        if os.path.exists(LEGACY_STATE_FILE):
+            try:
+                with open(LEGACY_STATE_FILE, "r") as f:
+                    migriert = json.load(f)
+                conn.execute(
+                    "INSERT INTO kv_store (key, value) VALUES ('state', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (json.dumps(migriert),)
+                )
+                conn.commit()
+                print(f"State aus {LEGACY_STATE_FILE} einmalig nach {STATE_DB_FILE} migriert.")
+                return migriert
+            except Exception as e:
+                print(f"Migration von {LEGACY_STATE_FILE} fehlgeschlagen: {e}")
+        return {}
+    finally:
+        conn.close()
+
+
+# Wird in setup_hook() erstellt, sobald der Event-Loop läuft.
+_save_queue: "asyncio.Queue | None" = None
+_state_writer_task = None
+
+
+async def _state_writer_loop():
+    """Läuft im Hintergrund solange der Bot läuft: nimmt State-Snapshots
+    aus der Queue entgegen und schreibt sie nacheinander per aiosqlite in
+    state.db. Dadurch blockiert kein einziger save_state()-Aufruf jemals
+    den Event-Loop."""
+    async with aiosqlite.connect(STATE_DB_FILE) as db:
+        await db.execute("CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT)")
+        await db.commit()
+        while True:
+            payload = await _save_queue.get()
+            try:
+                await db.execute(
+                    "INSERT INTO kv_store (key, value) VALUES ('state', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (payload,)
+                )
+                await db.commit()
+            except Exception as e:
+                print(f"State konnte nicht in SQLite gespeichert werden: {e}")
+            finally:
+                _save_queue.task_done()
+
 
 def save_state():
-    """Schreibt den State sofort auf die Platte."""
-    tmp = STATE_FILE + ".tmp"
-    try:
-        # Erst in temporäre Datei, dann umbenennen — so bleibt die
-        # state.json auch bei Stromausfall mitten im Schreiben heil.
-        with open(tmp, "w") as f:
-            json.dump(state, f, indent=2)
-        os.replace(tmp, STATE_FILE)
-    except Exception as e:
-        print(f"State konnte nicht gespeichert werden: {e}")
+    """Sichert den aktuellen State. Läuft der Bot bereits (Event-Loop aktiv),
+    wird der Schreibvorgang nicht-blockierend an den Hintergrund-Task
+    übergeben. Vor dem Start des Bots (z.B. ensure_state_keys() beim Import)
+    gibt es noch keinen Loop — dann wird synchron geschrieben."""
+    payload = json.dumps(state)
+    if _save_queue is not None:
+        _save_queue.put_nowait(payload)
+    else:
+        try:
+            _sqlite_write_sync(payload)
+        except Exception as e:
+            print(f"State konnte nicht gespeichert werden: {e}")
 
 
 # Für häufige, unkritische Änderungen (XP, Aktivität):
@@ -384,6 +467,10 @@ def ist_poll_admin(interaction: discord.Interaction) -> bool:
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
+        global _save_queue, _state_writer_task
+        _save_queue = asyncio.Queue()
+        _state_writer_task = asyncio.create_task(_state_writer_loop())
+
         guild = discord.Object(id=GUILD_ID)
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
@@ -391,6 +478,28 @@ class MyBot(commands.Bot):
 
 intents = discord.Intents.all()
 bot = MyBot(command_prefix="!", intents=intents)
+
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    """Globaler Auffang für alle Slash-Commands. Ohne das hier bleibt eine
+    Interaction bei jedem unerwarteten Fehler stumm auf 'Wird nachgedacht...'
+    hängen — für den Nutzer sieht das wie ein Absturz aus, und im Log steht
+    nichts brauchbares. Ab jetzt: immer eine Rückmeldung, immer ein Log-Eintrag."""
+    ursprung = getattr(error, "original", error)
+    befehl = interaction.command.name if interaction.command else "?"
+    print(f"Fehler in /{befehl}: {ursprung!r}")
+    import traceback
+    traceback.print_exception(type(ursprung), ursprung, ursprung.__traceback__)
+
+    nachricht = "🎩 *Es tut mir leid, aber dabei ist etwas schiefgelaufen.* Bitte versuchen Sie es erneut — sollte es weiter bestehen, wurde der Fehler bereits geloggt."
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(nachricht, ephemeral=True)
+        else:
+            await interaction.response.send_message(nachricht, ephemeral=True)
+    except Exception:
+        pass
 
 
 # ================= EVENT PANEL =================
@@ -3351,13 +3460,19 @@ async def cmd_selbsttest(interaction: discord.Interaction):
 # ================= SELBST-UPDATE =================
 
 async def _run_cmd(*args, cwd=None, timeout=60):
-    """Führt einen Shell-Befehl aus und gibt (returncode, stdout, stderr) zurück."""
-    proc = await asyncio.create_subprocess_exec(
-        *args,
-        cwd=cwd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    """Führt einen Shell-Befehl aus und gibt (returncode, stdout, stderr) zurück.
+    Wirft NIE eine Exception — fehlt z.B. 'git' im PATH, kommt das als
+    returncode -1 mit Fehlertext zurück, statt den aufrufenden Slash-Command
+    (und damit die Discord-Interaction) abstürzen zu lassen."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except Exception as e:
+        return -1, "", f"Befehl konnte nicht gestartet werden: {e}"
     try:
         out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
@@ -3426,10 +3541,15 @@ async def cmd_update(interaction: discord.Interaction):
         ephemeral=True
     )
 
-    # ── 5. Neustart — systemd (Restart=always) fängt uns auf ────
+    # ── 5. Neustart ───────────────────────────────────────────────
+    # os.execv ersetzt den laufenden Prozess durch eine frische Instanz
+    # mit demselben Interpreter/Argumenten — das funktioniert zuverlässig
+    # unabhängig davon, ob ein systemd-Service (Restart=always) oder ein
+    # einfaches "python3 main.py" den Bot gestartet hat. os._exit(0) allein
+    # würde den Bot ohne Supervisor dauerhaft offline lassen.
     print("Selbst-Update: Neustart wird ausgelöst...")
     await bot.close()
-    os._exit(0)
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 @bot.tree.command(name="status", description="Zeigt Betriebszustand und Version (nur Admins)")
@@ -3758,7 +3878,8 @@ async def on_voice_state_update(member: discord.Member, before, after):
 # ================= BACKUP =================
 
 async def sende_backup(ziel_user_id: int, grund: str = "Automatisches Tagesbackup") -> bool:
-    """Schickt die state.json als Datei per DM."""
+    """Schickt den aktuellen State als JSON-Datei per DM (portables Export-
+    Format für /restore — der Bot selbst speichert intern in SQLite)."""
     try:
         user = bot.get_user(ziel_user_id) or await bot.fetch_user(ziel_user_id)
         if not user:
@@ -3774,20 +3895,20 @@ async def sende_backup(ziel_user_id: int, grund: str = "Automatisches Tagesbacku
         zeitstempel = datetime.now(berlin).strftime("%Y-%m-%d_%H-%M")
         dateiname = f"state_backup_{zeitstempel}.json"
 
-        with open(STATE_FILE, "rb") as f:
-            datei = discord.File(f, filename=dateiname)
-            await user.send(
-                content=(
-                    f"🗄️ **{grund}**\n"
-                    f"_{datetime.now(berlin).strftime('%d.%m.%Y um %H:%M')} Uhr_\n\n"
-                    f"Enthalten: **{anz_hs}** Spieler im Highscore · "
-                    f"**{anz_ach}** Achievements · "
-                    f"**{anz_arch}** Archiv-Einträge · "
-                    f"**{anz_geb}** Geburtstage\n\n"
-                    f"_Zum Wiederherstellen die Datei behalten und bei Bedarf_ `/restore` _nutzen._"
-                ),
-                file=datei
-            )
+        rohdaten = json.dumps(state, indent=2, ensure_ascii=False).encode("utf-8")
+        datei = discord.File(io.BytesIO(rohdaten), filename=dateiname)
+        await user.send(
+            content=(
+                f"🗄️ **{grund}**\n"
+                f"_{datetime.now(berlin).strftime('%d.%m.%Y um %H:%M')} Uhr_\n\n"
+                f"Enthalten: **{anz_hs}** Spieler im Highscore · "
+                f"**{anz_ach}** Achievements · "
+                f"**{anz_arch}** Archiv-Einträge · "
+                f"**{anz_geb}** Geburtstage\n\n"
+                f"_Zum Wiederherstellen die Datei behalten und bei Bedarf_ `/restore` _nutzen._"
+            ),
+            file=datei
+        )
         return True
     except Exception as e:
         print(f"Backup fehlgeschlagen: {e}")

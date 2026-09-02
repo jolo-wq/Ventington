@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+
+# Laufzeit-State (SQLite) — gehört nicht ins Repo
+state.db
+state.db-journal
+state.db-wal
+state.db-shm
+
+# Legacy — falls noch vorhanden, nur für die einmalige Migration relevant
+state.json
