@@ -3512,7 +3512,33 @@ async def cmd_update(interaction: discord.Interaction):
         )
         return
 
-    # ── 3. Syntaxprüfung — schützt vor Aussperren ───────────────
+    # ── 3. Neue/geänderte Abhängigkeiten einspielen ────────────
+    # 'git pull' allein installiert keine Pakete. Bringt die neue Fassung
+    # einen neuen Import mit (wie seinerzeit aiosqlite), würde der Bot nach
+    # dem Neustart mit ModuleNotFoundError abstürzen — und systemd gibt nach
+    # ein paar Fehlversuchen ganz auf. Darum: requirements.txt anwenden,
+    # sobald sich die Datei geändert hat.
+    _, geaenderte_dateien, _ = await _run_cmd(
+        "git", "diff", "--name-only", f"{alter_commit}..HEAD", cwd=projekt
+    )
+    if "requirements.txt" in geaenderte_dateien.split():
+        rc_pip, pip_out, pip_err = await _run_cmd(
+            sys.executable, "-m", "pip", "install", "-r",
+            os.path.join(projekt, "requirements.txt"),
+            cwd=projekt, timeout=300
+        )
+        if rc_pip != 0:
+            # Zurückrollen — Code und installierte Pakete müssen zusammenpassen
+            await _run_cmd("git", "reset", "--hard", alter_commit, cwd=projekt)
+            await interaction.followup.send(
+                f"⚠️ **Die neuen Abhängigkeiten ließen sich nicht installieren!**\n"
+                f"Ich habe auf die vorherige Fassung zurückgesetzt und starte *nicht* neu.\n\n"
+                f"```\n{(pip_err or pip_out).strip()[:1200]}\n```",
+                ephemeral=True
+            )
+            return
+
+    # ── 4. Syntaxprüfung — schützt vor Aussperren ──────────────
     rc_check, _, err_check = await _run_cmd(
         sys.executable, "-m", "py_compile", os.path.join(projekt, "main.py"), cwd=projekt
     )
@@ -3527,7 +3553,7 @@ async def cmd_update(interaction: discord.Interaction):
         )
         return
 
-    # ── 4. Was hat sich geändert? ───────────────────────────────
+    # ── 5. Was hat sich geändert? ──────────────────────────────
     _, log, _ = await _run_cmd(
         "git", "log", "--oneline", f"{alter_commit}..HEAD", cwd=projekt
     )
@@ -3541,7 +3567,7 @@ async def cmd_update(interaction: discord.Interaction):
         ephemeral=True
     )
 
-    # ── 5. Neustart ───────────────────────────────────────────────
+    # ── 6. Neustart ───────────────────────────────────────────────
     # os.execv ersetzt den laufenden Prozess durch eine frische Instanz
     # mit demselben Interpreter/Argumenten — das funktioniert zuverlässig
     # unabhängig davon, ob ein systemd-Service (Restart=always) oder ein
