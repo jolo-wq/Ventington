@@ -1,0 +1,21 @@
+[Unit]
+Description=Ventington Discord Bot
+After=network-online.target
+Wants=network-online.target
+# Nicht sofort aufgeben, wenn ein fehlerhaftes /update ein paarmal crasht
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/Ventington
+EnvironmentFile=/home/pi/Ventington/.env
+# venv zuerst, aber die System-Pfade MUESSEN drin bleiben — sonst findet
+# /update und /status kein 'git' (FileNotFoundError: 'git')
+Environment="PATH=/home/pi/Ventington/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/pi/Ventington/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
