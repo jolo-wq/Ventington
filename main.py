@@ -2433,6 +2433,7 @@ async def cmd_commands(interaction: discord.Interaction):
             "`/backup` \u00b7 `/restore` \u2014 Daten sichern & zurueckspielen\n"
             "`/rolle_hinzufuegen` \u00b7 `/rollen_panel` \u2014 Selbstwahl-Rollen\n"
             "`/update` \u2014 Neueste Version von GitHub holen\n"
+            "`/restart` \u2014 Bot neu starten (ohne Update)\n"
             "`/status` \u2014 Betriebszustand & Version\n"
             "`/selbsttest` \u2014 Alle Systeme pruefen"
         ),
@@ -3594,6 +3595,21 @@ async def cmd_update(interaction: discord.Interaction):
     # einfaches "python3 main.py" den Bot gestartet hat. os._exit(0) allein
     # würde den Bot ohne Supervisor dauerhaft offline lassen.
     print("Selbst-Update: Neustart wird ausgelöst...")
+    await bot.close()
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
+@bot.tree.command(name="restart", description="Startet den Bot neu, ohne Code zu aktualisieren (nur Admins)")
+async def cmd_restart(interaction: discord.Interaction):
+    if not ist_admin(interaction):
+        await interaction.response.send_message("🚫 Keine Berechtigung!", ephemeral=True)
+        return
+
+    await interaction.response.send_message(
+        "🎩 Sehr wohl. Ich ziehe mich kurz zurück und bin gleich wieder da.",
+        ephemeral=True
+    )
+    print(f"Manueller Neustart ausgelöst von {interaction.user} ({interaction.user.id})")
     await bot.close()
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
